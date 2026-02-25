@@ -6,106 +6,89 @@ from agent.venice_client import VeniceClient
 logger = logging.getLogger("akashguard.voice")
 
 NARRATOR_SYSTEM_PROMPT = (
-    "You are an infrastructure incident narrator. Given raw incident data, "
-    "produce a clear one-sentence spoken summary suitable for a voice alert. "
-    "No emojis. No emdashes. Professional tone. Do not use special characters. "
-    "Output only the spoken sentence, nothing else."
+    "You are an infrastructure incident narrator for a voice alert system. "
+    "Given raw incident data, produce a clear 2-3 sentence spoken summary. "
+    "CRITICAL RULES: "
+    "- Do NOT read any numbers, deployment IDs, addresses, hashes, or technical identifiers. "
+    "- Do NOT say things like 'deployment 25692225' or 'provider akash175...' "
+    "- Instead say 'a new deployment' or 'a provider on the Akash network'. "
+    "- Use approximate durations like 'about three minutes' instead of exact seconds. "
+    "- No emojis. No emdashes. Professional but conversational tone. "
+    "- No special characters. "
+    "- Output only the spoken sentences, nothing else."
 )
 
 
-async def generate_service_down_voice(
-    venice: VeniceClient,
-    service_name: str,
-    diagnosis: dict[str, Any],
-) -> tuple[bytes | None, str]:
-    """Generate voice note for service down alert.
-
-    Returns (audio_bytes_or_None, caption).
-    """
-    confidence_pct = int(diagnosis.get("confidence", 0) * 100)
-    diag_text = diagnosis.get("diagnosis", "unknown")
-    action = diagnosis.get("recommended_action", "unknown")
-
-    # Use Venice chat completions for a polished narrative
-    user_msg = (
-        f"Service: {service_name}, Status: down, "
-        f"Diagnosis: {diag_text}, "
-        f"Confidence: {confidence_pct}%, "
-        f"Action: {action}"
-    )
-    narrative = await venice.chat_completions(NARRATOR_SYSTEM_PROMPT, user_msg)
-
-    if narrative:
-        script = narrative
-    else:
-        script = (
-            f"Critical alert. {service_name} is unreachable. "
-            f"The AI diagnosed {diag_text} with {confidence_pct} percent confidence. "
-            f"Recommended action: {action}."
-        )
-
-    caption = f"AkashGuard Alert: {service_name} is down"
-    audio = await venice.tts(script)
-    return audio, caption
+def _human_duration(seconds: float | int) -> str:
+    """Convert seconds to human-friendly spoken duration."""
+    s = int(seconds)
+    if s < 60:
+        return f"about {s} seconds"
+    mins = s // 60
+    remaining = s % 60
+    if remaining == 0:
+        return f"about {mins} minute{'s' if mins != 1 else ''}"
+    return f"about {mins} minute{'s' if mins != 1 else ''} and {remaining} seconds"
 
 
-async def generate_recovery_started_voice(
-    venice: VeniceClient,
-    service_name: str,
-    old_dseq: str | None,
-) -> tuple[bytes | None, str]:
-    """Generate voice note for recovery started.
-
-    Returns (audio_bytes_or_None, caption).
-    """
-    old_part = f"Closing old deployment {old_dseq}." if old_dseq else ""
-    script = (
-        f"Recovery initiated for {service_name}. "
-        f"{old_part} "
-        f"Creating new deployment on Akash network."
-    ).replace("  ", " ")
-
-    caption = f"AkashGuard: Recovery started for {service_name}"
-    audio = await venice.tts(script)
-    return audio, caption
-
-
-async def generate_recovery_complete_voice(
+async def generate_incident_summary_voice(
     venice: VeniceClient,
     service_name: str,
     result: dict[str, Any],
+    diagnosis: dict[str, Any] | None = None,
 ) -> tuple[bytes | None, str]:
-    """Generate voice note for recovery complete.
+    """Generate a single voice note summarizing the entire incident.
+
+    This is the ONLY voice note sent per incident — at the very end after recovery.
+    No numbers, no addresses, no technical IDs in the audio.
 
     Returns (audio_bytes_or_None, caption).
     """
-    new_dseq = result.get("new_dseq", "unknown")
-    provider = result.get("provider", "unknown")
-    provider_short = provider[:20] if provider else "unknown"
-    bid_price = result.get("bid_price", "unknown")
-    bid_denom = result.get("bid_denom", "uakt")
+    success = result.get("success", False)
     duration = result.get("total_time_seconds", 0)
+    human_dur = _human_duration(duration)
+    diag_text = diagnosis.get("diagnosis", "a service failure") if diagnosis else "a service failure"
+    action = diagnosis.get("recommended_action", "redeploy") if diagnosis else "redeploy"
 
-    # Use Venice chat completions for a polished narrative
-    user_msg = (
-        f"Service: {service_name}, Status: recovered, "
-        f"New deployment: {new_dseq}, "
-        f"Provider: {provider_short}, "
-        f"Bid price: {bid_price} {bid_denom}/block, "
-        f"Recovery time: {duration} seconds"
-    )
+    if success:
+        user_msg = (
+            f"Service name: {service_name}. "
+            f"What happened: The service went down. "
+            f"AI diagnosis: {diag_text}. "
+            f"AI decision: {action}. "
+            f"Outcome: Successfully recovered. "
+            f"Recovery time: {human_dur}. "
+            f"The service is now back online on a new deployment with a new provider."
+        )
+        caption = f"AkashGuard: {service_name} recovered successfully"
+    else:
+        error = result.get("error", "unknown error")
+        user_msg = (
+            f"Service name: {service_name}. "
+            f"What happened: The service went down. "
+            f"AI diagnosis: {diag_text}. "
+            f"AI decision: {action}. "
+            f"Outcome: Recovery failed. Error: {error}. "
+            f"Manual intervention may be required."
+        )
+        caption = f"AkashGuard: {service_name} recovery failed"
+
     narrative = await venice.chat_completions(NARRATOR_SYSTEM_PROMPT, user_msg)
 
-    if narrative:
-        script = narrative
-    else:
-        script = (
-            f"Recovery successful. {service_name} is back online on deployment {new_dseq}. "
-            f"Provider: {provider_short}. "
-            f"Bid price: {bid_price}. "
-            f"Total recovery time: {duration} seconds."
-        )
+    if not narrative:
+        # Fallback — still no numbers
+        if success:
+            narrative = (
+                f"The {service_name} service went down due to {diag_text}. "
+                f"Our AI agent initiated auto-recovery on the Akash network. "
+                f"The service is now back online after {human_dur}."
+            )
+        else:
+            narrative = (
+                f"The {service_name} service went down due to {diag_text}. "
+                f"Our AI agent attempted auto-recovery but it failed. "
+                f"Manual intervention may be required."
+            )
 
-    caption = f"AkashGuard: {service_name} recovered successfully"
-    audio = await venice.tts(script)
+    audio = await venice.tts(narrative)
     return audio, caption

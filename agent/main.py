@@ -133,7 +133,6 @@ class AkashGuardAgent:
             logger.info("service=%s status=healthy", name)
             if prev_status in ("down", "degraded", "recovering"):
                 bus.emit("service_healthy", {"service": name})
-                await self.notifier.notify_service_healthy(name)
             return
 
         if status == "unknown":
@@ -147,6 +146,14 @@ class AkashGuardAgent:
             "status": status,
             "consecutive_failures": failures,
         })
+
+        # Telegram: notify on first failure
+        if failures == 1:
+            await self.notifier.notify_first_failure(name, "Health check failed")
+
+        # Telegram: notify when threshold hit
+        if failures == settings.failure_threshold:
+            await self.notifier.notify_threshold_hit(name, failures, settings.failure_threshold)
 
         # Emit health_streak when nearing or hitting threshold
         bus.emit("health_streak", {
@@ -192,6 +199,9 @@ class AkashGuardAgent:
             name, action, confidence, diagnosis["diagnosis"],
         )
 
+        # Telegram: notify LLM decision
+        await self.notifier.notify_llm_decision(name, diagnosis)
+
         if action != "redeploy":
             logger.info("service=%s action=%s, no recovery needed", name, action)
             return
@@ -209,10 +219,7 @@ class AkashGuardAgent:
             return
 
         detection_time = time.time()
-        await self.notifier.notify_service_down(name, diagnosis)
-
         old_dseq = svc.get("current_dseq")
-        await self.notifier.notify_recovery_started(name, old_dseq)
 
         bus.emit("recovery_start", {
             "service": name,
@@ -274,7 +281,7 @@ class AkashGuardAgent:
         screenshot_b64 = await self._capture_screenshot(url)
 
         if not screenshot_b64:
-            await self.notifier.notify_vision_skipped(service_name, "screenshot capture failed")
+            logger.warning("service=%s vision verification skipped: screenshot capture failed", service_name)
             return
 
         assessment = await self.notifier.venice.vision(
@@ -283,10 +290,8 @@ class AkashGuardAgent:
         )
 
         if not assessment:
-            await self.notifier.notify_vision_skipped(service_name, "vision API unavailable")
+            logger.warning("service=%s vision verification skipped: vision API unavailable", service_name)
             return
-
-        await self.notifier.notify_vision_check(service_name, assessment)
         logger.info("service=%s vision verification complete: %s", service_name, assessment)
 
     @staticmethod

@@ -13,19 +13,19 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #000003;
+    --bg: #050507;
     --surface: rgba(255,255,255,0.03);
     --surface-hover: rgba(255,255,255,0.05);
     --border: rgba(255,255,255,0.06);
     --border-hover: rgba(255,255,255,0.1);
-    --text: rgba(255,255,255,0.85);
-    --text-secondary: #9ca3af;
-    --text-muted: rgba(255,255,255,0.5);
-    --accent: #1b00fe;
+    --text: #ffffff;
+    --text-secondary: #6b7280;
+    --text-muted: #4b5563;
+    --accent: #22c55e;
     --purple: #6C5CE7;
-    --blue: #3B82F6;
-    --green: #16a34a;
-    --red: #ff2244;
+    --blue: #3b82f6;
+    --green: #22c55e;
+    --red: #ef4444;
     --orange: #f59e0b;
     --teal: #00CEC9;
     --font: 'Inter', system-ui, -apple-system, sans-serif;
@@ -41,29 +41,6 @@
     position: relative;
   }
 
-  /* Background glow effects */
-  body::before,
-  body::after {
-    content: '';
-    position: fixed;
-    width: 600px;
-    height: 600px;
-    border-radius: 50%;
-    filter: blur(200px);
-    opacity: 0.07;
-    pointer-events: none;
-    z-index: 0;
-  }
-  body::before {
-    top: -200px;
-    left: -100px;
-    background: var(--accent);
-  }
-  body::after {
-    top: -200px;
-    right: -100px;
-    background: var(--purple);
-  }
 
   code, .mono { font-family: var(--mono); }
 
@@ -92,7 +69,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(108,92,231,0.12);
+    background: rgba(255,255,255,0.05);
     border-radius: 8px;
     font-size: 18px;
   }
@@ -101,7 +78,7 @@
     font-weight: 700;
     letter-spacing: -0.02em;
   }
-  .topbar-brand span { color: var(--purple); }
+  .topbar-brand span { color: var(--green); }
   .topbar-sub {
     font-weight: 400;
     color: var(--text-secondary);
@@ -114,25 +91,24 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 5px 14px;
-    border-radius: 20px;
-    background: rgba(22,163,74,0.08);
-    border: 1px solid rgba(22,163,74,0.2);
+    padding: 4px 14px;
+    border-radius: 9999px;
+    background: rgba(34,197,94,0.1);
+    border: 1px solid rgba(34,197,94,0.2);
     transition: all 0.3s ease;
     cursor: default;
   }
   .live-dot {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: var(--green);
-    box-shadow: 0 0 8px rgba(22,163,74,0.6);
     animation: liveBlink 1.5s ease-in-out infinite;
     flex-shrink: 0;
   }
   .live-text {
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--green);
@@ -146,22 +122,20 @@
     50% { opacity: 0.15; }
   }
   .live-indicator.down {
-    background: rgba(255,34,68,0.1);
-    border-color: rgba(255,34,68,0.3);
+    background: rgba(239,68,68,0.1);
+    border-color: rgba(239,68,68,0.2);
   }
   .live-indicator.down .live-dot {
     background: var(--red);
-    box-shadow: 0 0 12px rgba(255,34,68,0.7);
     animation: liveBlinkFast 0.6s ease-in-out infinite;
   }
   .live-indicator.down .live-text { color: var(--red); }
   .live-indicator.recovering {
     background: rgba(245,158,11,0.1);
-    border-color: rgba(245,158,11,0.3);
+    border-color: rgba(245,158,11,0.2);
   }
   .live-indicator.recovering .live-dot {
     background: var(--orange);
-    box-shadow: 0 0 10px rgba(245,158,11,0.6);
     animation: liveBlinkFast 0.8s ease-in-out infinite;
   }
   .live-indicator.recovering .live-text { color: var(--orange); }
@@ -175,13 +149,12 @@
   }
   .sse-dot.connected {
     background: var(--green);
-    box-shadow: 0 0 8px rgba(22,163,74,0.5);
     animation: dotPulse 2s ease-in-out infinite;
   }
   .sse-dot.disconnected { background: var(--red); }
   @keyframes dotPulse {
-    0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(22,163,74,0.5); }
-    50% { opacity: 0.6; box-shadow: 0 0 16px rgba(22,163,74,0.3); }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
   .clock {
     font-size: 13px;
@@ -201,11 +174,11 @@
 
   /* ─── Column Shared ─── */
   .col-title {
-    font-size: 0.7rem;
+    font-size: 14px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-secondary);
+    letter-spacing: 0.05em;
+    color: #ffffff;
     margin-bottom: 16px;
   }
 
@@ -222,7 +195,7 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 20px;
+    padding: 24px;
     margin-bottom: 16px;
     transition: border-color 0.2s ease;
   }
@@ -246,8 +219,8 @@
   }
 
   .badge {
-    padding: 3px 10px;
-    border-radius: 20px;
+    padding: 4px 12px;
+    border-radius: 9999px;
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
@@ -255,15 +228,15 @@
     transition: all 0.2s;
   }
   .badge-healthy {
-    background: rgba(22,163,74,0.12);
+    background: rgba(34,197,94,0.1);
     color: var(--green);
-    animation: dotPulse 2s ease-in-out infinite;
+    border: 1px solid rgba(34,197,94,0.2);
   }
-  .badge-down { background: rgba(255,34,68,0.12); color: var(--red); }
-  .badge-degraded { background: rgba(245,158,11,0.12); color: var(--orange); }
-  .badge-recovering { background: rgba(59,130,246,0.12); color: var(--blue); animation: dotPulse 2s ease-in-out infinite; }
-  .badge-unknown { background: rgba(156,163,175,0.12); color: var(--text-secondary); }
-  .badge-cooldown { background: rgba(59,130,246,0.12); color: var(--blue); }
+  .badge-down { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+  .badge-degraded { background: rgba(245,158,11,0.1); color: var(--orange); border: 1px solid rgba(245,158,11,0.2); }
+  .badge-recovering { background: rgba(59,130,246,0.1); color: var(--blue); border: 1px solid rgba(59,130,246,0.2); animation: dotPulse 2s ease-in-out infinite; }
+  .badge-unknown { background: rgba(156,163,175,0.08); color: var(--text-secondary); border: 1px solid rgba(156,163,175,0.15); }
+  .badge-cooldown { background: rgba(59,130,246,0.1); color: var(--blue); border: 1px solid rgba(59,130,246,0.2); }
 
   .svc-grid {
     display: grid;
@@ -326,13 +299,12 @@
   .btn:hover { transform: translateY(-1px); }
   .btn:active { transform: translateY(0); }
   .btn-kill {
-    border-color: rgba(255,34,68,0.25);
+    border-color: rgba(239,68,68,0.2);
     color: var(--red);
   }
   .btn-kill:hover {
-    background: rgba(255,34,68,0.08);
-    box-shadow: 0 0 24px rgba(255,34,68,0.12);
-    border-color: rgba(255,34,68,0.4);
+    background: rgba(239,68,68,0.1);
+    border-color: rgba(239,68,68,0.3);
   }
   .btn-sim {
     border-color: rgba(245,158,11,0.25);
@@ -396,29 +368,29 @@
     left: 50%;
     transform: translateX(-50%);
     padding: 8px 20px;
-    background: var(--accent);
-    color: #fff;
+    background: var(--green);
+    color: #000;
     border: none;
-    border-radius: 20px;
+    border-radius: 9999px;
     font-size: 12px;
     font-weight: 600;
     font-family: var(--font);
     cursor: pointer;
     z-index: 5;
-    box-shadow: 0 4px 24px rgba(27,0,254,0.3);
     transition: all 0.2s;
   }
-  .new-events-btn:hover { box-shadow: 0 4px 32px rgba(27,0,254,0.5); }
+  .new-events-btn:hover { background: rgba(34,197,94,0.85); }
   .new-events-btn.visible { display: block; }
 
   /* ─── Event Cards ─── */
   .evt {
-    padding: 12px 16px;
+    padding: 16px;
     margin-bottom: 6px;
-    border-radius: 10px;
+    border-radius: 12px;
     font-size: 13px;
-    border-left: 4px solid transparent;
     background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid transparent;
     animation: slideIn 0.25s ease-out;
     transition: background 0.2s;
   }
@@ -456,7 +428,7 @@
   .evt-health-fail .evt-label { color: var(--red); }
 
   /* Health Streak */
-  .evt-streak { border-left-color: var(--orange); padding: 14px 16px; }
+  .evt-streak { border-left-color: var(--orange); }
   .evt-streak .evt-label { color: var(--orange); }
 
   /* Cooldown */
@@ -472,31 +444,27 @@
   }
   @keyframes llmPulse {
     0%, 100% { background: var(--surface); }
-    50% { background: rgba(108,92,231,0.06); }
+    50% { background: rgba(255,255,255,0.04); }
   }
 
   /* LLM Response — the star card */
   .evt-llm-resp {
     border-left-color: var(--purple);
-    padding: 16px;
-    background: rgba(108,92,231,0.04);
-    border: 1px solid rgba(108,92,231,0.1);
-    border-left: 4px solid var(--purple);
-    border-radius: 10px;
+    padding: 20px;
   }
   .evt-llm-resp .evt-label {
     color: var(--purple);
     font-size: 11px;
   }
   .evt-llm-resp .reasoning {
-    background: rgba(108,92,231,0.06);
-    border-left: 3px solid rgba(108,92,231,0.3);
+    background: rgba(255,255,255,0.02);
+    border-left: 2px solid rgba(255,255,255,0.1);
     padding: 12px 14px;
     border-radius: 0 8px 8px 0;
     margin: 10px 0;
     font-size: 13px;
     line-height: 1.7;
-    color: rgba(255,255,255,0.8);
+    color: rgba(255,255,255,0.7);
     white-space: pre-wrap;
   }
   .confidence-row {
@@ -512,29 +480,29 @@
   }
   .confidence-bar {
     flex: 1;
-    height: 6px;
-    border-radius: 3px;
+    height: 4px;
+    border-radius: 2px;
     background: rgba(255,255,255,0.06);
     overflow: hidden;
   }
   .confidence-fill {
     height: 100%;
-    border-radius: 3px;
+    border-radius: 2px;
     transition: width 0.6s ease;
   }
   .action-badge {
     display: inline-block;
-    padding: 3px 10px;
-    border-radius: 6px;
+    padding: 4px 12px;
+    border-radius: 9999px;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  .action-redeploy { background: rgba(255,34,68,0.12); color: var(--red); }
-  .action-wait { background: rgba(245,158,11,0.12); color: var(--orange); }
-  .action-monitor { background: rgba(59,130,246,0.12); color: var(--blue); }
-  .action-none, .action-scale { background: rgba(156,163,175,0.12); color: var(--text-secondary); }
+  .action-redeploy { background: rgba(34,197,94,0.1); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
+  .action-wait { background: rgba(245,158,11,0.1); color: var(--orange); border: 1px solid rgba(245,158,11,0.2); }
+  .action-monitor { background: rgba(59,130,246,0.1); color: var(--blue); border: 1px solid rgba(59,130,246,0.2); }
+  .action-none, .action-scale { background: rgba(255,255,255,0.03); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.06); }
   .llm-meta {
     font-size: 11px;
     color: var(--text-muted);
@@ -555,12 +523,12 @@
     font-weight: 600;
     font-family: var(--mono);
   }
-  .status-2xx { background: rgba(22,163,74,0.12); color: var(--green); }
-  .status-4xx { background: rgba(245,158,11,0.12); color: var(--orange); }
-  .status-5xx, .status-err { background: rgba(255,34,68,0.12); color: var(--red); }
+  .status-2xx { background: rgba(34,197,94,0.1); color: var(--green); }
+  .status-4xx { background: rgba(245,158,11,0.1); color: var(--orange); }
+  .status-5xx, .status-err { background: rgba(239,68,68,0.1); color: var(--red); }
 
   /* Bids */
-  .evt-bids { border-left-color: var(--blue); padding: 16px; }
+  .evt-bids { border-left-color: var(--blue); }
   .evt-bids .evt-label { color: var(--blue); }
   .bids-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
   .bids-table th { text-align: left; color: var(--text-secondary); padding: 3px 8px 3px 0; font-weight: 600; }
@@ -570,10 +538,6 @@
   /* Recovery events */
   .evt-recovery-start {
     border-left-color: var(--orange);
-    padding: 16px;
-    background: rgba(245,158,11,0.04);
-    border: 1px solid rgba(245,158,11,0.1);
-    border-left: 4px solid var(--orange);
   }
   .evt-recovery-start .evt-label { color: var(--orange); font-size: 11px; }
   .evt-recovery-progress { border-left-color: var(--orange); }
@@ -581,24 +545,11 @@
 
   .evt-recovery-complete {
     border-left-color: var(--green);
-    padding: 18px;
-    background: rgba(22,163,74,0.04);
-    border: 1px solid rgba(22,163,74,0.12);
-    border-left: 4px solid var(--green);
-    animation: slideIn 0.25s ease-out, successGlow 2s ease-in-out 3;
   }
   .evt-recovery-complete .evt-label { color: var(--green); font-size: 12px; }
-  @keyframes successGlow {
-    0%, 100% { box-shadow: none; }
-    50% { box-shadow: 0 0 30px rgba(22,163,74,0.1); }
-  }
 
   .evt-recovery-failed {
     border-left-color: var(--red);
-    padding: 18px;
-    background: rgba(255,34,68,0.04);
-    border: 1px solid rgba(255,34,68,0.1);
-    border-left: 4px solid var(--red);
   }
   .evt-recovery-failed .evt-label { color: var(--red); font-size: 12px; }
 
@@ -614,10 +565,6 @@
   /* Service healthy */
   .evt-svc-healthy {
     border-left-color: var(--green);
-    padding: 16px;
-    background: rgba(22,163,74,0.04);
-    border: 1px solid rgba(22,163,74,0.1);
-    border-left: 4px solid var(--green);
   }
   .evt-svc-healthy .evt-label { color: var(--green); font-size: 12px; }
 
@@ -646,16 +593,16 @@
   .info-card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
+    border-radius: 16px;
+    padding: 24px;
   }
   .info-card-title {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-secondary);
-    margin-bottom: 12px;
+    letter-spacing: 0.05em;
+    color: #ffffff;
+    margin-bottom: 16px;
   }
   .info-row {
     display: flex;
@@ -762,13 +709,12 @@
   }
   .modal-btn-cancel:hover { background: var(--surface-hover); }
   .modal-btn-kill {
-    background: rgba(255,34,68,0.12);
-    border-color: rgba(255,34,68,0.3);
+    background: rgba(239,68,68,0.1);
+    border-color: rgba(239,68,68,0.2);
     color: var(--red);
   }
   .modal-btn-kill:hover {
-    background: rgba(255,34,68,0.2);
-    box-shadow: 0 0 20px rgba(255,34,68,0.15);
+    background: rgba(239,68,68,0.2);
   }
 
   /* AI → Akash Console tag */
@@ -777,12 +723,13 @@
     padding: 2px 8px;
     border-radius: 4px;
     font-size: 9px;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: 0.04em;
-    background: rgba(59,130,246,0.12);
+    background: rgba(59,130,246,0.1);
     color: var(--blue);
     font-family: var(--mono);
     text-transform: none;
+    border: 1px solid rgba(59,130,246,0.15);
   }
 
   /* Spinner for recovery */
@@ -796,6 +743,86 @@
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ─── Hero Card ─── */
+  .hero-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin: 20px 24px 0;
+  }
+  .hero-main {
+    margin-bottom: 24px;
+  }
+  .hero-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+  .hero-number-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .hero-number {
+    font-size: 48px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .hero-badge {
+    padding: 4px 14px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: rgba(34,197,94,0.1);
+    color: var(--green);
+    border: 1px solid rgba(34,197,94,0.2);
+  }
+  .hero-badge.incident {
+    background: rgba(239,68,68,0.1);
+    color: var(--red);
+    border-color: rgba(239,68,68,0.2);
+  }
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .hero-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .hero-stat-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: #ffffff;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-stat-label {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-secondary);
+  }
+  .hero-sparkline {
+    margin-top: 16px;
+    height: 40px;
+  }
+  .hero-sparkline canvas {
+    width: 100%;
+    height: 40px;
+  }
 </style>
 </head>
 <body>
@@ -831,6 +858,36 @@
 
   <!-- CENTER: Activity Log -->
   <div class="col-center">
+    <div class="hero-card" id="heroCard">
+      <div class="hero-main">
+        <div class="hero-label">System Uptime</div>
+        <div class="hero-number-row">
+          <span class="hero-number" id="heroUptime">--</span>
+          <span class="hero-badge" id="heroBadge">ALL OK</span>
+        </div>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <span class="hero-stat-value" id="heroRecoveries">0</span>
+          <span class="hero-stat-label">Recoveries</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-value" id="heroAvgRecovery">-</span>
+          <span class="hero-stat-label">Avg Recovery</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-value" id="heroTotalChecks">0</span>
+          <span class="hero-stat-label">Total Checks</span>
+        </div>
+        <div class="hero-stat">
+          <span class="hero-stat-value" id="heroActiveServices">0</span>
+          <span class="hero-stat-label">Active Services</span>
+        </div>
+      </div>
+      <div class="hero-sparkline">
+        <canvas id="heroSparkline" height="40"></canvas>
+      </div>
+    </div>
     <div class="col-center-header">
       <div class="col-title">Agent Activity</div>
     </div>
@@ -1352,8 +1409,8 @@ async function fetchMiniChart(name, id, canvas) {
         labels: data.map((_,i) => i),
         datasets: [{
           data,
-          borderColor: 'rgba(59,130,246,0.8)',
-          backgroundColor: 'rgba(59,130,246,0.08)',
+          borderColor: 'rgba(34,197,94,0.5)',
+          backgroundColor: 'rgba(34,197,94,0.05)',
           fill: true, tension: 0.4, pointRadius: 0, borderWidth: 1.5,
         }]
       },
@@ -1365,6 +1422,51 @@ async function fetchMiniChart(name, id, canvas) {
       }
     });
   } catch(e) {}
+}
+
+// ───── Hero Sparkline ─────
+let heroChart = null;
+function updateHeroSparkline(stats) {
+  const canvas = document.getElementById('heroSparkline');
+  if (!canvas) return;
+  // Build sparkline from recent health check data
+  fetch('/api/health-checks?limit=30').then(r => r.json()).then(d => {
+    const allChecks = d.health_checks || {};
+    // Flatten all service checks into time-ordered points
+    let points = [];
+    Object.values(allChecks).forEach(checks => {
+      checks.forEach(c => {
+        points.push({ t: new Date(c.checked_at).getTime(), healthy: c.is_healthy ? 1 : 0 });
+      });
+    });
+    points.sort((a, b) => a.t - b.t);
+    // Take last 30 points, show rolling healthy %
+    const last = points.slice(-30);
+    if (last.length < 2) return;
+    const data = last.map((_, i) => {
+      const window = last.slice(0, i + 1);
+      return (window.filter(p => p.healthy).length / window.length) * 100;
+    });
+    if (heroChart) heroChart.destroy();
+    heroChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: data.map((_, i) => i),
+        datasets: [{
+          data,
+          borderColor: 'rgba(34,197,94,0.6)',
+          backgroundColor: 'rgba(34,197,94,0.05)',
+          fill: true, tension: 0.4, pointRadius: 0, borderWidth: 1.5,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { x: { display: false }, y: { display: false, min: 0, max: 100 } },
+        plugins: { legend: { display: false } },
+        animation: false,
+      }
+    });
+  }).catch(() => {});
 }
 
 // ───── Stats + Services refresh ─────
@@ -1379,11 +1481,11 @@ async function fetchStats() {
     $quickStats.innerHTML = `
       <div class="quick-stats">
         <div class="quick-stat">
-          <div class="quick-stat-value purple">${str.total_recoveries_attempted || 0}</div>
+          <div class="quick-stat-value">${str.total_recoveries_attempted || 0}</div>
           <div class="quick-stat-label">Recoveries</div>
         </div>
         <div class="quick-stat">
-          <div class="quick-stat-value blue">${str.avg_recovery_time_seconds ? str.avg_recovery_time_seconds + 's' : '-'}</div>
+          <div class="quick-stat-value">${str.avg_recovery_time_seconds ? str.avg_recovery_time_seconds + 's' : '-'}</div>
           <div class="quick-stat-label">Avg Time</div>
         </div>
         <div class="quick-stat">
@@ -1395,6 +1497,35 @@ async function fetchStats() {
 
     renderServices(sr.services);
     updateLiveFromServices(sr.services);
+
+    // Hero card
+    const $heroUptime = document.getElementById('heroUptime');
+    const $heroBadge = document.getElementById('heroBadge');
+    if ($heroUptime) {
+      const hChecks = str.total_health_checks || 0;
+      const hFailures = str.total_failures_detected || 0;
+      if (hChecks > 0) {
+        $heroUptime.textContent = ((hChecks - hFailures) / hChecks * 100).toFixed(1) + '%';
+      } else {
+        $heroUptime.textContent = '100%';
+      }
+    }
+    if ($heroBadge) {
+      const hasIncident = globalStatus === 'down' || globalStatus === 'recovering';
+      $heroBadge.textContent = hasIncident ? 'INCIDENT ACTIVE' : 'ALL OK';
+      $heroBadge.className = 'hero-badge' + (hasIncident ? ' incident' : '');
+    }
+    const $heroRecov = document.getElementById('heroRecoveries');
+    if ($heroRecov) $heroRecov.textContent = str.total_recoveries_attempted || 0;
+    const $heroAvg = document.getElementById('heroAvgRecovery');
+    if ($heroAvg) $heroAvg.textContent = str.avg_recovery_time_seconds ? str.avg_recovery_time_seconds + 's' : '-';
+    const $heroChecks = document.getElementById('heroTotalChecks');
+    if ($heroChecks) $heroChecks.textContent = str.total_health_checks || 0;
+    const $heroSvc = document.getElementById('heroActiveServices');
+    if ($heroSvc) $heroSvc.textContent = str.services_count || 0;
+
+    // Hero sparkline
+    updateHeroSparkline(str);
 
     // Right column: Agent Info
     const $agentStatus = document.getElementById('agentStatus');

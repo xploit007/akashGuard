@@ -74,7 +74,7 @@ def generate_incident_card(incident_data: dict[str, Any]) -> bytes | None:
 
     incident_data keys:
         service_name, detection_time, diagnosis, confidence, action,
-        old_dseq, new_dseq, new_uri, provider, bid_price, bid_denom,
+        old_dseq, new_dseq, new_uri, provider, bid_price,
         lease_id, recovery_duration, downtime_duration, resolved_time
     """
     try:
@@ -165,9 +165,8 @@ def _render_card(data: dict[str, Any]) -> bytes:
     y += LINE_HEIGHT
 
     bid_price = data.get("bid_price", "N/A")
-    bid_denom = data.get("bid_denom", "uakt")
     draw.text((LABEL_X, y), "Bid Price:", fill=LABEL_GRAY, font=font_label)
-    draw.text((VALUE_X, y), f"{bid_price} {bid_denom}/block", fill=WHITE, font=font_value)
+    draw.text((VALUE_X, y), f"{bid_price}/block", fill=WHITE, font=font_value)
     y += LINE_HEIGHT
 
     draw.text((LABEL_X, y), "Lease ID:", fill=LABEL_GRAY, font=font_label)
