@@ -85,8 +85,12 @@ class RecoveryEngine:
         self._emit_api("DELETE", f"/v1/deployments/{dseq}", f"Closing deployment DSEQ {dseq}")
         try:
             resp = await self._client.delete(f"/deployments/{dseq}")
-            logger.debug("DELETE /deployments/%s status=%s", dseq, resp.status_code)
-            resp.raise_for_status()
+            logger.debug("DELETE /deployments/%s status=%s body=%s", dseq, resp.status_code, resp.text[:300])
+            if resp.status_code >= 400:
+                logger.warning("close_deployment dseq=%s got %s: %s", dseq, resp.status_code, resp.text[:300])
+                self._emit_api_resp("DELETE", f"/v1/deployments/{dseq}", resp.status_code, f"Failed: {resp.text[:200]}")
+                bus.emit("akash_close_old", {"service": self._service_name, "old_dseq": dseq, "status": f"failed: HTTP {resp.status_code}"})
+                return False
             self._emit_api_resp("DELETE", f"/v1/deployments/{dseq}", resp.status_code, f"Deployment {dseq} closed")
             bus.emit("akash_close_old", {"service": self._service_name, "old_dseq": dseq, "status": "closed"})
             logger.info("closed deployment dseq=%s", dseq)
@@ -283,20 +287,29 @@ class RecoveryEngine:
             "bids_summary": bids_summary,
         })
 
-        # Step 4: accept first open bid
+        # Step 4: accept cheapest open bid (sort by price ascending)
+        def _bid_price_float(b: dict) -> float:
+            try:
+                return float(b.get("bid", b).get("price", {}).get("amount", "999999"))
+            except (ValueError, TypeError):
+                return 999999.0
+
+        open_bids.sort(key=_bid_price_float)
         bid = open_bids[0]
         bid_id = bid.get("bid", {}).get("id", bid.get("id", {}))
         provider = bid_id.get("provider", "")
         gseq = int(bid_id.get("gseq", 1))
         oseq = int(bid_id.get("oseq", 1))
 
-        bid_price = bid.get("bid", bid).get("price", {})
+        bid_price_data = bid.get("bid", bid).get("price", {})
+        bid_price_amount = bid_price_data.get("amount", "?")
+        bid_price_denom = bid_price_data.get("denom", "uakt")
         bus.emit("akash_bid_selected", {
             "service": name,
             "dseq": new_dseq,
             "provider": provider,
-            "price": bid_price.get("amount", "?"),
-            "denom": bid_price.get("denom", "uakt"),
+            "price": bid_price_amount,
+            "denom": bid_price_denom,
         })
 
         bus.emit("recovery_progress", {"service": name, "step": "accept_bid", "detail": f"Accepting bid from {provider[:20]}..."})
@@ -371,6 +384,10 @@ class RecoveryEngine:
             "new_dseq": new_dseq,
             "uris": uris,
             "provider": provider,
+            "bid_price": bid_price_amount,
+            "bid_denom": bid_price_denom,
+            "gseq": gseq,
+            "oseq": oseq,
             "error": None,
         }
         logger.info("recovery complete: %s", result)

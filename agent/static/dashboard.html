@@ -705,6 +705,86 @@
     font-size: 13px;
   }
 
+  /* Confirm modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal-box {
+    background: #111;
+    border: 1px solid var(--border-hover);
+    border-radius: 16px;
+    padding: 28px 32px;
+    max-width: 400px;
+    width: 90%;
+    animation: slideIn 0.2s ease-out;
+  }
+  .modal-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--red);
+    margin-bottom: 10px;
+  }
+  .modal-body {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
+  .modal-body strong { color: var(--text); }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+  .modal-btn {
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font);
+    border: 1px solid;
+    transition: all 0.15s;
+  }
+  .modal-btn:hover { transform: translateY(-1px); }
+  .modal-btn-cancel {
+    background: transparent;
+    border-color: var(--border-hover);
+    color: var(--text-secondary);
+  }
+  .modal-btn-cancel:hover { background: var(--surface-hover); }
+  .modal-btn-kill {
+    background: rgba(255,34,68,0.12);
+    border-color: rgba(255,34,68,0.3);
+    color: var(--red);
+  }
+  .modal-btn-kill:hover {
+    background: rgba(255,34,68,0.2);
+    box-shadow: 0 0 20px rgba(255,34,68,0.15);
+  }
+
+  /* AI → Akash Console tag */
+  .ai-akash-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    background: rgba(59,130,246,0.12);
+    color: var(--blue);
+    font-family: var(--mono);
+    text-transform: none;
+  }
+
   /* Spinner for recovery */
   .spinner {
     display: inline-block;
@@ -795,26 +875,22 @@
     </div>
 
     <div class="info-card">
-      <div class="info-card-title">Stats</div>
+      <div class="info-card-title">Recovery Stats</div>
       <div id="agentStatsPanel">
         <div class="info-row">
-          <span class="info-row-label">Health Checks</span>
-          <span class="info-row-value" id="statChecks">0</span>
+          <span class="info-row-label">Uptime Rate</span>
+          <span class="info-row-value" id="statUptime" style="color:var(--green)">-</span>
         </div>
         <div class="info-row">
-          <span class="info-row-label">Failures</span>
+          <span class="info-row-label">Incidents</span>
           <span class="info-row-value" id="statFailures" style="color:var(--red)">0</span>
         </div>
         <div class="info-row">
           <span class="info-row-label">Recoveries</span>
-          <span class="info-row-value" id="statRecoveries" style="color:var(--purple)">0</span>
+          <span class="info-row-value" id="statRecoveries">-</span>
         </div>
         <div class="info-row">
-          <span class="info-row-label">Successful</span>
-          <span class="info-row-value" id="statRecovSucc" style="color:var(--green)">0</span>
-        </div>
-        <div class="info-row">
-          <span class="info-row-label">Avg Recovery</span>
+          <span class="info-row-label">Avg Recovery Time</span>
           <span class="info-row-value" id="statAvgRecov">-</span>
         </div>
       </div>
@@ -828,6 +904,17 @@
     </div>
   </div>
 
+</div>
+
+<div class="modal-overlay" id="killModal">
+  <div class="modal-box">
+    <div class="modal-title">Kill Service</div>
+    <div class="modal-body">This will close the Akash deployment for <strong id="killModalName">-</strong>. The agent will detect the failure and attempt auto-recovery.</div>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn-cancel" onclick="closeKillModal()">Cancel</button>
+      <button class="modal-btn modal-btn-kill" id="killModalConfirm">Kill</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -881,6 +968,15 @@ function statusClass(code) {
   if (code >= 200 && code < 300) return 'status-2xx';
   if (code >= 400 && code < 500) return 'status-4xx';
   return 'status-5xx';
+}
+
+function formatAkt(amount, denom) {
+  let val = parseFloat(amount);
+  if (isNaN(val)) return amount + ' ' + (denom || '');
+  val = val.toFixed(4).replace(/\.?0+$/, '');
+  // Replace IBC hash denom with "AKT"
+  const label = (denom && denom.startsWith('ibc/')) ? 'AKT' : (denom || 'AKT');
+  return val + ' ' + label;
 }
 
 function confColor(c) {
@@ -952,18 +1048,12 @@ function renderEvent(evt) {
       }
 
     case 'health_streak':
-      return `<div class="evt evt-streak">
-        <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#9888; Failure Streak</div>
-        <div class="evt-body"><strong>${d.consecutive_failures}</strong> consecutive failures (threshold: ${d.threshold})</div>
-      </div>`;
+      // Hidden — redundant with health_check failure card
+      return '';
 
     case 'service_down':
-      return `<div class="evt evt-health-fail">
-        <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#128680; Service ${(d.status||'down').toUpperCase()}</div>
-        <div class="evt-body">${d.consecutive_failures || 0} failures detected</div>
-      </div>`;
+      // Hidden — redundant with health_check failure card
+      return '';
 
     case 'service_healthy':
       return `<div class="evt evt-svc-healthy">
@@ -1007,11 +1097,8 @@ function renderEvent(evt) {
       return '';
 
     case 'llm_decision':
-      return `<div class="evt evt-llm-req">
-        <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#9889; Decision</div>
-        <div class="evt-body">Action: <span class="action-badge action-${d.action || 'wait'}">${d.action || 'wait'}</span> &nbsp; Confidence: ${Math.round((d.confidence||0)*100)}%</div>
-      </div>`;
+      // Hidden — redundant with llm_response card which shows full diagnosis + action
+      return '';
 
     case 'akash_api_call':
       // Hide low-level HTTP calls — milestones shown via dedicated events
@@ -1025,40 +1112,43 @@ function renderEvent(evt) {
       const closeOk = (d.status||'').includes('closed') && !(d.status||'').includes('failed');
       return `<div class="evt ${closeOk ? 'evt-health-ok' : 'evt-health-fail'}">
         <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">${closeOk ? '&#10004;' : '&#10060;'} Old Deployment ${closeOk ? 'Closed' : 'Close Failed'}</div>
+        <div class="evt-label"><span class="ai-akash-tag">AI → Akash Console</span> ${closeOk ? '&#10004;' : '&#10060;'} Old Deployment ${closeOk ? 'Closed' : 'Close Failed'}</div>
         <div class="evt-body">DSEQ ${d.old_dseq}</div>
       </div>`;
 
     case 'akash_create_deploy':
       return `<div class="evt evt-api">
         <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#127968; New Deployment</div>
+        <div class="evt-label"><span class="ai-akash-tag">AI → Akash Console</span> &#127968; New Deployment Created</div>
         <div class="evt-body">DSEQ: <strong>${d.new_dseq}</strong>${d.transaction_hash ? ' &middot; TX: ' + trunc(d.transaction_hash, 20) : ''}</div>
       </div>`;
 
     case 'akash_bids_received':
+      // Sort bids by price for display
+      const sortedBids = (d.bids_summary || []).slice().sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
       let bidsHtml = `<table class="bids-table"><tr><th>Provider</th><th>Price</th></tr>`;
-      (d.bids_summary || []).forEach((b, i) => {
-        bidsHtml += `<tr><td>${trunc(b.provider, 25)}</td><td>${b.price}</td></tr>`;
+      sortedBids.forEach((b, i) => {
+        const highlight = i === 0 ? ' style="color:var(--green);font-weight:600"' : '';
+        bidsHtml += `<tr><td>${trunc(b.provider, 25)}</td><td${highlight}>${formatAkt(b.price, b.denom)}${i === 0 ? ' ← cheapest' : ''}</td></tr>`;
       });
       bidsHtml += '</table>';
       return `<div class="evt evt-bids">
         <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#128176; ${d.num_bids} Bids Received</div>
+        <div class="evt-label"><span class="ai-akash-tag">AI → Akash Console</span> &#128176; ${d.num_bids} Bids Received</div>
         <div class="evt-body">${bidsHtml}</div>
       </div>`;
 
     case 'akash_bid_selected':
       return `<div class="evt evt-api">
         <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#9989; Bid Selected</div>
-        <div class="evt-body">Provider: <code class="mono">${trunc(d.provider, 30)}</code><br>Price: ${d.price} ${d.denom || ''}</div>
+        <div class="evt-label"><span class="ai-akash-tag">AI → Akash Console</span> &#9989; Cheapest Bid Selected</div>
+        <div class="evt-body">Provider: <code class="mono">${trunc(d.provider, 30)}</code><br>Price: <strong style="color:var(--green)">${formatAkt(d.price, d.denom)}</strong></div>
       </div>`;
 
     case 'akash_lease_created':
       return `<div class="evt evt-api">
         <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#128196; Lease Created</div>
+        <div class="evt-label"><span class="ai-akash-tag">AI → Akash Console</span> &#128196; Lease Created</div>
         <div class="evt-body">DSEQ: ${d.dseq} &middot; Provider: <code class="mono">${trunc(d.provider, 20)}</code></div>
       </div>`;
 
@@ -1066,16 +1156,13 @@ function renderEvent(evt) {
       const uriLinks = (d.uris || []).map(u => `<a href="http://${u}" target="_blank">${u}</a>`).join(', ');
       return `<div class="evt evt-uri">
         <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#127760; URI Ready</div>
+        <div class="evt-label"><span class="ai-akash-tag">AI → Akash Console</span> &#127760; Service Live — URI Ready</div>
         <div class="evt-body">${uriLinks}</div>
       </div>`;
 
     case 'telegram_sent':
-      return `<div class="evt evt-telegram">
-        <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#128241; Telegram</div>
-        <div class="evt-body">Sent "${d.message_type}" notification</div>
-      </div>`;
+      // Hidden — plumbing, not actionable
+      return '';
 
     case 'recovery_start':
       return `<div class="evt evt-recovery-start">
@@ -1085,11 +1172,8 @@ function renderEvent(evt) {
       </div>`;
 
     case 'recovery_progress':
-      return `<div class="evt evt-recovery-progress">
-        <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#9881; Recovery</div>
-        <div class="evt-body">${d.detail || d.step}</div>
-      </div>`;
+      // Hidden — redundant with milestone events (close_old, create_deploy, bids, lease, uri)
+      return '';
 
     case 'recovery_complete':
       return `<div class="evt evt-recovery-complete">
@@ -1328,13 +1412,24 @@ async function fetchStats() {
       $agentSvcCount.textContent = str.services_count || 0;
     }
 
-    // Right column: Stats
-    const $statChecks = document.getElementById('statChecks');
-    if ($statChecks) {
-      $statChecks.textContent = str.total_health_checks || 0;
-      document.getElementById('statFailures').textContent = str.total_failures_detected || 0;
-      document.getElementById('statRecoveries').textContent = str.total_recoveries_attempted || 0;
-      document.getElementById('statRecovSucc').textContent = str.total_recoveries_succeeded || 0;
+    // Right column: Recovery Stats
+    const $statUptime = document.getElementById('statUptime');
+    if ($statUptime) {
+      const checks = str.total_health_checks || 0;
+      const failures = str.total_failures_detected || 0;
+      const attempted = str.total_recoveries_attempted || 0;
+      const succeeded = str.total_recoveries_succeeded || 0;
+      // Uptime = (checks - failures) / checks * 100
+      if (checks > 0) {
+        const uptime = ((checks - failures) / checks * 100).toFixed(1);
+        $statUptime.textContent = uptime + '%';
+        $statUptime.style.color = uptime >= 99 ? 'var(--green)' : uptime >= 95 ? 'var(--orange)' : 'var(--red)';
+      } else {
+        $statUptime.textContent = '-';
+      }
+      document.getElementById('statFailures').textContent = failures;
+      document.getElementById('statRecoveries').textContent = attempted > 0 ? succeeded + '/' + attempted + ' successful' : '0';
+      document.getElementById('statRecoveries').style.color = succeeded === attempted && attempted > 0 ? 'var(--green)' : attempted > 0 ? 'var(--orange)' : 'var(--text)';
       document.getElementById('statAvgRecov').textContent = str.avg_recovery_time_seconds ? str.avg_recovery_time_seconds + 's' : '-';
     }
 
@@ -1362,13 +1457,27 @@ async function fetchStats() {
 }
 
 // ───── Kill / Simulate ─────
-async function killService(name) {
-  if (!confirm('KILL SERVICE: This will close the Akash deployment for "' + name + '". The agent will detect the failure and attempt recovery. Continue?')) return;
-  try {
-    const r = await fetch('/api/services/' + encodeURIComponent(name) + '/kill', { method: 'POST' });
-    const d = await r.json();
-    console.log('Kill result:', d);
-  } catch(e) { console.error('kill failed', e); }
+function killService(name) {
+  const $modal = document.getElementById('killModal');
+  document.getElementById('killModalName').textContent = name;
+  $modal.classList.add('visible');
+  const $btn = document.getElementById('killModalConfirm');
+  // Replace onclick to avoid stacking listeners
+  $btn.onclick = async () => {
+    closeKillModal();
+    updateLiveIndicator('down');
+    clearEmptyState();
+    try {
+      const r = await fetch('/api/services/' + encodeURIComponent(name) + '/kill', { method: 'POST' });
+      const d = await r.json();
+      console.log('Kill result:', d);
+      fetchStats();
+    } catch(e) { console.error('kill failed', e); }
+  };
+}
+
+function closeKillModal() {
+  document.getElementById('killModal').classList.remove('visible');
 }
 
 async function simulateFailure(name) {

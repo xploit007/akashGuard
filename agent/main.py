@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import io
 import logging
 import time
 from pathlib import Path
@@ -43,7 +45,7 @@ class AkashGuardAgent:
     async def start(self) -> None:
         init_db()
         self.running = True
-        logger.info("AkashGuard agent started — interval=%ds", settings.health_check_interval)
+        logger.info("AkashGuard agent started, interval=%ds", settings.health_check_interval)
         try:
             await self.run_loop()
         finally:
@@ -60,7 +62,7 @@ class AkashGuardAgent:
     async def monitor_cycle(self) -> None:
         results = await self.health_checker.check_all_services()
 
-        # Check for simulated failures — override real results
+        # Check for simulated failures, override real results
         for r in results:
             name = r["service_name"]
             if name in simulate_failures and simulate_failures[name] > 0:
@@ -84,13 +86,12 @@ class AkashGuardAgent:
                 except Exception:
                     pass
 
-        # Emit health_check events — suppress during cooldown
+        # Emit health_check events, suppress during cooldown
         for r in results:
             name = r["service_name"]
             if name in recovery_cooldowns:
                 remaining = recovery_cooldowns[name] - time.time()
                 if remaining > 0:
-                    # Cooldown event emitted once in _evaluate_and_act — skip here
                     continue
                 del recovery_cooldowns[name]
             bus.emit("health_check", {
@@ -154,7 +155,7 @@ class AkashGuardAgent:
             "threshold": settings.failure_threshold,
         })
 
-        logger.warning("service=%s status=%s — requesting LLM diagnosis", name, status)
+        logger.warning("service=%s status=%s, requesting LLM diagnosis", name, status)
 
         bus.emit("diagnosis_start", {"service": name})
 
@@ -192,21 +193,22 @@ class AkashGuardAgent:
         )
 
         if action != "redeploy":
-            logger.info("service=%s action=%s — no recovery needed", name, action)
+            logger.info("service=%s action=%s, no recovery needed", name, action)
             return
 
         if confidence < REDEPLOY_CONFIDENCE_THRESHOLD:
             logger.info(
-                "service=%s confidence=%.2f < threshold=%.2f — skipping redeploy",
+                "service=%s confidence=%.2f < threshold=%.2f, skipping redeploy",
                 name, confidence, REDEPLOY_CONFIDENCE_THRESHOLD,
             )
             return
 
         sdl = self._load_sdl(svc)
         if not sdl:
-            logger.error("service=%s has no SDL — cannot redeploy", name)
+            logger.error("service=%s has no SDL, cannot redeploy", name)
             return
 
+        detection_time = time.time()
         await self.notifier.notify_service_down(name, diagnosis)
 
         old_dseq = svc.get("current_dseq")
@@ -228,16 +230,19 @@ class AkashGuardAgent:
             service_name=name,
         )
 
-        await self.notifier.notify_recovery_complete(name, result)
+        await self.notifier.notify_recovery_complete(
+            name, result, diagnosis=diagnosis, detection_time=detection_time,
+        )
 
         if result["success"]:
             recovery_cooldowns[name] = time.time() + RECOVERY_COOLDOWN_SECONDS
             logger.info("service=%s cooldown set for %ds", name, RECOVERY_COOLDOWN_SECONDS)
             total_time = result.get("total_time_seconds", round(time.monotonic() - t0, 1))
+            new_uri = (result.get("uris") or [""])[0]
             bus.emit("recovery_complete", {
                 "service": name,
                 "new_dseq": result.get("new_dseq"),
-                "new_uri": (result.get("uris") or [""])[0],
+                "new_uri": new_uri,
                 "provider": result.get("provider"),
                 "total_time_seconds": total_time,
             })
@@ -245,6 +250,13 @@ class AkashGuardAgent:
                 "service=%s recovery succeeded new_dseq=%s provider=%s uris=%s",
                 name, result["new_dseq"], result["provider"], result["uris"],
             )
+
+            # Vision-based health verification (background task)
+            if new_uri:
+                asyncio.create_task(
+                    self._vision_verify(name, new_uri),
+                    name=f"vision-verify-{name}",
+                )
         else:
             bus.emit("recovery_failed", {
                 "service": name,
@@ -252,6 +264,72 @@ class AkashGuardAgent:
                 "step": "recovery",
             })
             logger.error("service=%s recovery failed: %s", name, result["error"])
+
+    async def _vision_verify(self, service_name: str, uri: str) -> None:
+        """Wait 20s, screenshot the service, send to Venice vision, report via Telegram."""
+        logger.info("service=%s vision verification scheduled, waiting 20s for boot", service_name)
+        await asyncio.sleep(20)
+
+        url = uri if uri.startswith("http") else f"http://{uri}"
+        screenshot_b64 = await self._capture_screenshot(url)
+
+        if not screenshot_b64:
+            await self.notifier.notify_vision_skipped(service_name, "screenshot capture failed")
+            return
+
+        assessment = await self.notifier.venice.vision(
+            screenshot_b64,
+            "Is this web service functioning correctly? Check if the page loaded properly, shows expected content, and has no error messages.",
+        )
+
+        if not assessment:
+            await self.notifier.notify_vision_skipped(service_name, "vision API unavailable")
+            return
+
+        await self.notifier.notify_vision_check(service_name, assessment)
+        logger.info("service=%s vision verification complete: %s", service_name, assessment)
+
+    @staticmethod
+    async def _capture_screenshot(url: str) -> str | None:
+        """Capture a screenshot. Try playwright first, fall back to httpx HTML fetch."""
+        # Try playwright
+        try:
+            from playwright.async_api import async_playwright
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                page = await browser.new_page(viewport={"width": 1280, "height": 720})
+                await page.goto(url, timeout=15000, wait_until="domcontentloaded")
+                await asyncio.sleep(2)
+                screenshot_bytes = await page.screenshot(type="png")
+                await browser.close()
+                return base64.b64encode(screenshot_bytes).decode("ascii")
+        except Exception as exc:
+            logger.warning("Playwright screenshot failed (%s), trying httpx fallback", exc)
+
+        # Fallback: fetch HTML, render as simple image for vision model
+        try:
+            import httpx as _httpx
+            async with _httpx.AsyncClient(timeout=_httpx.Timeout(10.0)) as client:
+                resp = await client.get(url)
+                html = resp.text[:2000]
+                from PIL import Image, ImageDraw, ImageFont
+                img = Image.new("RGB", (800, 400), (255, 255, 255))
+                draw = ImageDraw.Draw(img)
+                font = ImageFont.load_default()
+                draw.text((20, 20), f"URL: {url}", fill=(0, 0, 0), font=font)
+                draw.text((20, 40), f"Status: {resp.status_code}", fill=(0, 0, 0), font=font)
+                lines = html.split("\n")[:15]
+                y_pos = 70
+                for line in lines:
+                    draw.text((20, y_pos), line[:100], fill=(0, 0, 0), font=font)
+                    y_pos += 18
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                buf.seek(0)
+                return base64.b64encode(buf.read()).decode("ascii")
+        except Exception as exc2:
+            logger.error("httpx fallback screenshot also failed: %s", exc2)
+            return None
 
     @staticmethod
     def _load_sdl(svc: dict[str, Any]) -> str | None:
