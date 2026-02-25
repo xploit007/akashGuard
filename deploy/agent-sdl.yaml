@@ -1,0 +1,49 @@
+---
+version: "2.0"
+
+services:
+  agent:
+    image: <DOCKER_HUB_USERNAME>/akashguard-agent:latest
+    expose:
+      - port: 8000
+        as: 80
+        to:
+          - global: true
+    env:
+      - AKASHML_API_KEY=<AKASHML_API_KEY>
+      - AKASHML_BASE_URL=https://api.akashml.com/v1
+      - AKASHML_MODEL=meta-llama/Llama-3.3-70B-Instruct
+      - AKASH_CONSOLE_API_KEY=<AKASH_CONSOLE_API_KEY>
+      - AKASH_CONSOLE_API_BASE=https://console-api.akash.network/v1
+      - TELEGRAM_BOT_TOKEN=<TELEGRAM_BOT_TOKEN>
+      - TELEGRAM_CHAT_ID=<TELEGRAM_CHAT_ID>
+      - LANGFUSE_SECRET_KEY=<LANGFUSE_SECRET_KEY>
+      - LANGFUSE_PUBLIC_KEY=<LANGFUSE_PUBLIC_KEY>
+      - LANGFUSE_BASE_URL=https://cloud.langfuse.com
+      - DB_PATH=./data/akashguard.db
+      - HEALTH_CHECK_INTERVAL=30
+      - FAILURE_THRESHOLD=3
+      - RESPONSE_TIME_THRESHOLD_MS=5000
+
+profiles:
+  compute:
+    agent:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 512Mi
+        storage:
+          size: 2Gi
+  placement:
+    dcloud:
+      pricing:
+        agent:
+          denom: uakt
+          amount: 10000
+
+deployment:
+  agent:
+    dcloud:
+      profile: agent
+      count: 1

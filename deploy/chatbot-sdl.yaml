@@ -1,0 +1,38 @@
+---
+version: "2.0"
+
+services:
+  chatbot:
+    image: xploitkid/akashguard-chatbot:latest
+    expose:
+      - port: 5000
+        as: 80
+        to:
+          - global: true
+    env:
+      - AKASHML_API_KEY=akml-piofGkmukeiNwkwifRPJFJfSmcWCyNWY
+      - AKASHML_BASE_URL=https://api.akashml.com/v1
+      - AKASHML_MODEL=meta-llama/Llama-3.3-70B-Instruct
+
+profiles:
+  compute:
+    chatbot:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 512Mi
+        storage:
+          size: 1Gi
+  placement:
+    dcloud:
+      pricing:
+        chatbot:
+          denom: uakt
+          amount: 10000
+
+deployment:
+  chatbot:
+    dcloud:
+      profile: chatbot
+      count: 1

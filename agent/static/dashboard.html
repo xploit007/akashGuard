@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AkashGuard Mission Control</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #000003;
+    --surface: rgba(255,255,255,0.03);
+    --surface-hover: rgba(255,255,255,0.05);
+    --border: rgba(255,255,255,0.06);
+    --border-hover: rgba(255,255,255,0.1);
+    --text: rgba(255,255,255,0.85);
+    --text-secondary: #9ca3af;
+    --text-muted: rgba(255,255,255,0.5);
+    --accent: #1b00fe;
+    --purple: #6C5CE7;
+    --blue: #3B82F6;
+    --green: #16a34a;
+    --red: #ff2244;
+    --orange: #f59e0b;
+    --teal: #00CEC9;
+    --font: 'Inter', system-ui, -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Background glow effects */
+  body::before,
+  body::after {
+    content: '';
+    position: fixed;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    filter: blur(200px);
+    opacity: 0.07;
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::before {
+    top: -200px;
+    left: -100px;
+    background: var(--accent);
+  }
+  body::after {
+    top: -200px;
+    right: -100px;
+    background: var(--purple);
+  }
+
+  code, .mono { font-family: var(--mono); }
+
+  /* ─── Scrollbar ─── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+  /* ─── Top Bar ─── */
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 60px;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    position: relative;
+    z-index: 10;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 14px; }
+  .shield-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(108,92,231,0.12);
+    border-radius: 8px;
+    font-size: 18px;
+  }
+  .topbar-brand {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .topbar-brand span { color: var(--purple); }
+  .topbar-sub {
+    font-weight: 400;
+    color: var(--text-secondary);
+    margin-left: 6px;
+  }
+  .topbar-right { display: flex; align-items: center; gap: 20px; }
+
+  /* ─── Live Status Indicator (recording-style) ─── */
+  .live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 14px;
+    border-radius: 20px;
+    background: rgba(22,163,74,0.08);
+    border: 1px solid rgba(22,163,74,0.2);
+    transition: all 0.3s ease;
+    cursor: default;
+  }
+  .live-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px rgba(22,163,74,0.6);
+    animation: liveBlink 1.5s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  .live-text {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--green);
+  }
+  @keyframes liveBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+  @keyframes liveBlinkFast {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.15; }
+  }
+  .live-indicator.down {
+    background: rgba(255,34,68,0.1);
+    border-color: rgba(255,34,68,0.3);
+  }
+  .live-indicator.down .live-dot {
+    background: var(--red);
+    box-shadow: 0 0 12px rgba(255,34,68,0.7);
+    animation: liveBlinkFast 0.6s ease-in-out infinite;
+  }
+  .live-indicator.down .live-text { color: var(--red); }
+  .live-indicator.recovering {
+    background: rgba(245,158,11,0.1);
+    border-color: rgba(245,158,11,0.3);
+  }
+  .live-indicator.recovering .live-dot {
+    background: var(--orange);
+    box-shadow: 0 0 10px rgba(245,158,11,0.6);
+    animation: liveBlinkFast 0.8s ease-in-out infinite;
+  }
+  .live-indicator.recovering .live-text { color: var(--orange); }
+
+  .sse-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+  .sse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .sse-dot.connected {
+    background: var(--green);
+    box-shadow: 0 0 8px rgba(22,163,74,0.5);
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+  .sse-dot.disconnected { background: var(--red); }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(22,163,74,0.5); }
+    50% { opacity: 0.6; box-shadow: 0 0 16px rgba(22,163,74,0.3); }
+  }
+  .clock {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+  }
+
+  /* ─── Layout ─── */
+  .layout {
+    display: grid;
+    grid-template-columns: 320px 1fr 280px;
+    height: calc(100vh - 60px);
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ─── Column Shared ─── */
+  .col-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  /* ─── Left Column ─── */
+  .col-left {
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .svc-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: border-color 0.2s ease;
+  }
+  .svc-card:hover { border-color: var(--border-hover); }
+  .svc-card.recovering { border-color: rgba(245,158,11,0.3); animation: borderPulse 2s ease-in-out infinite; }
+  @keyframes borderPulse {
+    0%, 100% { border-color: rgba(245,158,11,0.3); }
+    50% { border-color: rgba(245,158,11,0.1); }
+  }
+
+  .svc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .svc-name {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .badge {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    transition: all 0.2s;
+  }
+  .badge-healthy {
+    background: rgba(22,163,74,0.12);
+    color: var(--green);
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+  .badge-down { background: rgba(255,34,68,0.12); color: var(--red); }
+  .badge-degraded { background: rgba(245,158,11,0.12); color: var(--orange); }
+  .badge-recovering { background: rgba(59,130,246,0.12); color: var(--blue); animation: dotPulse 2s ease-in-out infinite; }
+  .badge-unknown { background: rgba(156,163,175,0.12); color: var(--text-secondary); }
+  .badge-cooldown { background: rgba(59,130,246,0.12); color: var(--blue); }
+
+  .svc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .svc-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .svc-stat-label {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+  }
+  .svc-stat-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    display: block;
+  }
+  .svc-card { overflow: hidden; }
+  .svc-grid { overflow: hidden; }
+  .svc-stat { overflow: hidden; min-width: 0; }
+
+  .svc-chart-wrap {
+    height: 50px;
+    margin-bottom: 16px;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .svc-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .btn {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    transition: all 0.2s ease;
+    background: transparent;
+    font-family: var(--font);
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn-kill {
+    border-color: rgba(255,34,68,0.25);
+    color: var(--red);
+  }
+  .btn-kill:hover {
+    background: rgba(255,34,68,0.08);
+    box-shadow: 0 0 24px rgba(255,34,68,0.12);
+    border-color: rgba(255,34,68,0.4);
+  }
+  .btn-sim {
+    border-color: rgba(245,158,11,0.25);
+    color: var(--orange);
+  }
+  .btn-sim:hover {
+    background: rgba(245,158,11,0.08);
+    border-color: rgba(245,158,11,0.4);
+  }
+
+  /* Quick stats row */
+  .quick-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .quick-stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 10px;
+    text-align: center;
+  }
+  .quick-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .quick-stat-label {
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  /* ─── Center Column ─── */
+  .col-center {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .col-center-header {
+    padding: 20px 24px 0;
+  }
+  .log-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 24px 24px;
+    position: relative;
+  }
+
+  /* New events button */
+  .new-events-btn {
+    display: none;
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 20px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font);
+    cursor: pointer;
+    z-index: 5;
+    box-shadow: 0 4px 24px rgba(27,0,254,0.3);
+    transition: all 0.2s;
+  }
+  .new-events-btn:hover { box-shadow: 0 4px 32px rgba(27,0,254,0.5); }
+  .new-events-btn.visible { display: block; }
+
+  /* ─── Event Cards ─── */
+  .evt {
+    padding: 12px 16px;
+    margin-bottom: 6px;
+    border-radius: 10px;
+    font-size: 13px;
+    border-left: 4px solid transparent;
+    background: var(--surface);
+    animation: slideIn 0.25s ease-out;
+    transition: background 0.2s;
+  }
+  .evt:hover { background: var(--surface-hover); }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .evt-time {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+  }
+  .evt-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .evt-body { line-height: 1.6; color: var(--text); }
+
+  /* Health OK */
+  .evt-health-ok { border-left-color: var(--green); }
+  .evt-health-ok .evt-label { color: var(--green); }
+  .evt-health-ok .evt-body { color: var(--text-secondary); font-size: 12px; }
+
+  /* Health Fail */
+  .evt-health-fail { border-left-color: var(--red); }
+  .evt-health-fail .evt-label { color: var(--red); }
+
+  /* Health Streak */
+  .evt-streak { border-left-color: var(--orange); padding: 14px 16px; }
+  .evt-streak .evt-label { color: var(--orange); }
+
+  /* Cooldown */
+  .evt-cooldown { border-left-color: var(--blue); }
+  .evt-cooldown .evt-label { color: var(--blue); }
+  .evt-cooldown .evt-body { color: var(--text-secondary); font-size: 12px; }
+
+  /* LLM Request */
+  .evt-llm-req { border-left-color: var(--purple); }
+  .evt-llm-req .evt-label { color: var(--purple); }
+  .evt-llm-req.waiting {
+    animation: slideIn 0.25s ease-out, llmPulse 2s ease-in-out infinite;
+  }
+  @keyframes llmPulse {
+    0%, 100% { background: var(--surface); }
+    50% { background: rgba(108,92,231,0.06); }
+  }
+
+  /* LLM Response — the star card */
+  .evt-llm-resp {
+    border-left-color: var(--purple);
+    padding: 16px;
+    background: rgba(108,92,231,0.04);
+    border: 1px solid rgba(108,92,231,0.1);
+    border-left: 4px solid var(--purple);
+    border-radius: 10px;
+  }
+  .evt-llm-resp .evt-label {
+    color: var(--purple);
+    font-size: 11px;
+  }
+  .evt-llm-resp .reasoning {
+    background: rgba(108,92,231,0.06);
+    border-left: 3px solid rgba(108,92,231,0.3);
+    padding: 12px 14px;
+    border-radius: 0 8px 8px 0;
+    margin: 10px 0;
+    font-size: 13px;
+    line-height: 1.7;
+    color: rgba(255,255,255,0.8);
+    white-space: pre-wrap;
+  }
+  .confidence-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+  }
+  .confidence-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .confidence-bar {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+  }
+  .confidence-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+  }
+  .action-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .action-redeploy { background: rgba(255,34,68,0.12); color: var(--red); }
+  .action-wait { background: rgba(245,158,11,0.12); color: var(--orange); }
+  .action-monitor { background: rgba(59,130,246,0.12); color: var(--blue); }
+  .action-none, .action-scale { background: rgba(156,163,175,0.12); color: var(--text-secondary); }
+  .llm-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    font-family: var(--mono);
+  }
+
+  /* Akash API events */
+  .evt-api { border-left-color: var(--blue); }
+  .evt-api .evt-label { color: var(--blue); }
+  .evt-api .mono { font-size: 12px; color: rgba(255,255,255,0.7); }
+  .evt-api-resp { border-left-color: var(--blue); }
+  .status-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--mono);
+  }
+  .status-2xx { background: rgba(22,163,74,0.12); color: var(--green); }
+  .status-4xx { background: rgba(245,158,11,0.12); color: var(--orange); }
+  .status-5xx, .status-err { background: rgba(255,34,68,0.12); color: var(--red); }
+
+  /* Bids */
+  .evt-bids { border-left-color: var(--blue); padding: 16px; }
+  .evt-bids .evt-label { color: var(--blue); }
+  .bids-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px; }
+  .bids-table th { text-align: left; color: var(--text-secondary); padding: 3px 8px 3px 0; font-weight: 600; }
+  .bids-table td { padding: 3px 8px 3px 0; color: var(--text-muted); font-family: var(--mono); font-size: 11px; }
+  .bids-table tr:first-child td { color: var(--blue); font-weight: 600; }
+
+  /* Recovery events */
+  .evt-recovery-start {
+    border-left-color: var(--orange);
+    padding: 16px;
+    background: rgba(245,158,11,0.04);
+    border: 1px solid rgba(245,158,11,0.1);
+    border-left: 4px solid var(--orange);
+  }
+  .evt-recovery-start .evt-label { color: var(--orange); font-size: 11px; }
+  .evt-recovery-progress { border-left-color: var(--orange); }
+  .evt-recovery-progress .evt-label { color: var(--orange); }
+
+  .evt-recovery-complete {
+    border-left-color: var(--green);
+    padding: 18px;
+    background: rgba(22,163,74,0.04);
+    border: 1px solid rgba(22,163,74,0.12);
+    border-left: 4px solid var(--green);
+    animation: slideIn 0.25s ease-out, successGlow 2s ease-in-out 3;
+  }
+  .evt-recovery-complete .evt-label { color: var(--green); font-size: 12px; }
+  @keyframes successGlow {
+    0%, 100% { box-shadow: none; }
+    50% { box-shadow: 0 0 30px rgba(22,163,74,0.1); }
+  }
+
+  .evt-recovery-failed {
+    border-left-color: var(--red);
+    padding: 18px;
+    background: rgba(255,34,68,0.04);
+    border: 1px solid rgba(255,34,68,0.1);
+    border-left: 4px solid var(--red);
+  }
+  .evt-recovery-failed .evt-label { color: var(--red); font-size: 12px; }
+
+  /* Telegram */
+  .evt-telegram { border-left-color: var(--text-secondary); }
+  .evt-telegram .evt-label { color: var(--text-secondary); }
+
+  /* URI ready */
+  .evt-uri { border-left-color: var(--green); }
+  .evt-uri a { color: var(--teal); text-decoration: none; }
+  .evt-uri a:hover { text-decoration: underline; }
+
+  /* Service healthy */
+  .evt-svc-healthy {
+    border-left-color: var(--green);
+    padding: 16px;
+    background: rgba(22,163,74,0.04);
+    border: 1px solid rgba(22,163,74,0.1);
+    border-left: 4px solid var(--green);
+  }
+  .evt-svc-healthy .evt-label { color: var(--green); font-size: 12px; }
+
+  .powered {
+    margin-top: 16px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  .powered strong { color: var(--text-secondary); }
+
+  /* ─── Right Column ─── */
+  .col-right {
+    border-left: 1px solid var(--border);
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .info-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .info-card-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-row-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .info-row-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    font-family: var(--mono);
+  }
+
+  .decision-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .decision-item:last-child { border-bottom: none; }
+  .decision-svc {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .decision-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    font-family: var(--mono);
+  }
+  .decision-action {
+    display: inline-block;
+    margin-top: 4px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  /* Spinner for recovery */
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(245,158,11,0.2);
+    border-top-color: var(--orange);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="shield-icon">&#128737;</div>
+    <div>
+      <span class="topbar-brand">Akash<span>Guard</span></span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="live-indicator" id="liveIndicator">
+      <span class="live-dot" id="liveDot"></span>
+      <span class="live-text" id="liveText">Connecting</span>
+    </div>
+    <div class="sse-status">
+      <span class="sse-dot disconnected" id="sseDot"></span>
+      <span id="sseLabel">Connecting...</span>
+    </div>
+    <span class="clock" id="clock"></span>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- LEFT: Services -->
+  <div class="col-left">
+    <div class="col-title">Services</div>
+    <div id="services"><div class="empty-state">Loading...</div></div>
+    <div id="quickStats"></div>
+    <div class="powered">Powered by<br><strong>AkashML + Akash Network</strong></div>
+  </div>
+
+  <!-- CENTER: Activity Log -->
+  <div class="col-center">
+    <div class="col-center-header">
+      <div class="col-title">Agent Activity</div>
+    </div>
+    <div class="log-container" id="log">
+      <div class="empty-state" id="logEmpty" style="padding:60px 20px;">
+        <div style="font-size:32px;margin-bottom:12px;opacity:0.3">&#128737;</div>
+        <div style="font-size:14px;color:var(--text-secondary);margin-bottom:4px;">All systems operational</div>
+        <div style="font-size:12px;">Events will appear here when something happens</div>
+      </div>
+    </div>
+    <button class="new-events-btn" id="newEventsBtn" onclick="jumpToBottom()">New events &#8595;</button>
+  </div>
+
+  <!-- RIGHT: Agent Info -->
+  <div class="col-right">
+    <div class="col-title">Agent Info</div>
+
+    <div class="info-card">
+      <div class="info-card-title">Agent Status</div>
+      <div id="agentInfoStats">
+        <div class="info-row">
+          <span class="info-row-label">Status</span>
+          <span class="info-row-value" id="agentStatus">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-row-label">Uptime</span>
+          <span class="info-row-value" id="agentUptime">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-row-label">Interval</span>
+          <span class="info-row-value" id="agentInterval">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-row-label">LLM Model</span>
+          <span class="info-row-value" id="agentModel">-</span>
+        </div>
+        <div class="info-row">
+          <span class="info-row-label">Services</span>
+          <span class="info-row-value" id="agentSvcCount">-</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-card-title">Stats</div>
+      <div id="agentStatsPanel">
+        <div class="info-row">
+          <span class="info-row-label">Health Checks</span>
+          <span class="info-row-value" id="statChecks">0</span>
+        </div>
+        <div class="info-row">
+          <span class="info-row-label">Failures</span>
+          <span class="info-row-value" id="statFailures" style="color:var(--red)">0</span>
+        </div>
+        <div class="info-row">
+          <span class="info-row-label">Recoveries</span>
+          <span class="info-row-value" id="statRecoveries" style="color:var(--purple)">0</span>
+        </div>
+        <div class="info-row">
+          <span class="info-row-label">Successful</span>
+          <span class="info-row-value" id="statRecovSucc" style="color:var(--green)">0</span>
+        </div>
+        <div class="info-row">
+          <span class="info-row-label">Avg Recovery</span>
+          <span class="info-row-value" id="statAvgRecov">-</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-card-title">Recent Decisions</div>
+      <div id="recentDecisions">
+        <div class="empty-state" style="padding:16px 0;font-size:11px;">No decisions yet</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ───── State ─────
+let services = [];
+let autoScroll = true;
+let sseConnected = false;
+let charts = {};
+let missedEvents = 0;
+let eventCounter = 0;
+let globalStatus = 'ok'; // 'ok' | 'down' | 'recovering'
+
+const $log = document.getElementById('log');
+const $services = document.getElementById('services');
+const $quickStats = document.getElementById('quickStats');
+const $clock = document.getElementById('clock');
+const $sseDot = document.getElementById('sseDot');
+const $sseLabel = document.getElementById('sseLabel');
+const $newEventsBtn = document.getElementById('newEventsBtn');
+
+// ───── Clock ─────
+function tickClock() {
+  $clock.textContent = new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+}
+tickClock(); setInterval(tickClock, 1000);
+
+// ───── Helpers ─────
+function timeAgo(ts) {
+  if (!ts) return 'never';
+  const d = new Date(ts * 1000);
+  const hms = d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+  const s = Math.max(0, Math.floor((Date.now()/1000) - ts));
+  if (s < 60) return hms + ' (' + s + 's ago)';
+  if (s < 3600) return hms + ' (' + Math.floor(s/60) + 'm ago)';
+  return hms + ' (' + Math.floor(s/3600) + 'h ago)';
+}
+
+function isoAgo(iso) {
+  if (!iso) return 'never';
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 0) return 'just now';
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  return Math.floor(s/3600) + 'h ago';
+}
+
+function trunc(s, n) { return s && s.length > n ? s.slice(0, n) + '...' : (s || '-'); }
+
+function statusClass(code) {
+  if (!code || code === 0) return 'status-err';
+  if (code >= 200 && code < 300) return 'status-2xx';
+  if (code >= 400 && code < 500) return 'status-4xx';
+  return 'status-5xx';
+}
+
+function confColor(c) {
+  if (c >= 0.8) return 'var(--green)';
+  if (c >= 0.6) return 'var(--orange)';
+  return 'var(--red)';
+}
+
+function formatUptime(sec) {
+  if (sec < 60) return sec + 's';
+  if (sec < 3600) return Math.floor(sec/60) + 'm ' + (sec%60) + 's';
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
+  return h + 'h ' + m + 'm';
+}
+
+// ───── Auto-scroll logic ─────
+$log.addEventListener('scroll', () => {
+  const atBottom = $log.scrollHeight - $log.scrollTop - $log.clientHeight < 40;
+  autoScroll = atBottom;
+  if (atBottom) {
+    missedEvents = 0;
+    $newEventsBtn.classList.remove('visible');
+  }
+});
+
+function scrollToBottom() {
+  if (autoScroll) {
+    $log.scrollTop = $log.scrollHeight;
+  }
+}
+
+function jumpToBottom() {
+  autoScroll = true;
+  missedEvents = 0;
+  $newEventsBtn.classList.remove('visible');
+  $log.scrollTop = $log.scrollHeight;
+}
+
+// ───── Event rendering ─────
+function renderEvent(evt) {
+  const t = evt.type;
+  const d = evt.data || {};
+  const ts = evt.timestamp;
+  const timeStr = timeAgo(ts);
+  const svc = d.service || '';
+
+  switch(t) {
+    case 'health_check':
+      if (d.status === 'cooldown') {
+        // Don't spam the feed — cooldown shown on service card badge
+        return '';
+      }
+      if (d.status === 'healthy') {
+        // Don't spam the feed — healthy status shown on service card
+        return '';
+      } else if (d.status === 'simulated_failure') {
+        return `<div class="evt evt-health-fail">
+          <div class="evt-time">${timeStr} &middot; ${svc}</div>
+          <div class="evt-label">&#9888; Simulated Failure</div>
+          <div class="evt-body">${d.error || 'Simulated failure activated'}</div>
+        </div>`;
+      } else {
+        return `<div class="evt evt-health-fail">
+          <div class="evt-time">${timeStr} &middot; ${svc}</div>
+          <div class="evt-label">&#10060; Health Failed</div>
+          <div class="evt-body">${d.error || ('Status ' + (d.status_code || 'N/A'))}</div>
+        </div>`;
+      }
+
+    case 'health_streak':
+      return `<div class="evt evt-streak">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#9888; Failure Streak</div>
+        <div class="evt-body"><strong>${d.consecutive_failures}</strong> consecutive failures (threshold: ${d.threshold})</div>
+      </div>`;
+
+    case 'service_down':
+      return `<div class="evt evt-health-fail">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#128680; Service ${(d.status||'down').toUpperCase()}</div>
+        <div class="evt-body">${d.consecutive_failures || 0} failures detected</div>
+      </div>`;
+
+    case 'service_healthy':
+      return `<div class="evt evt-svc-healthy">
+        <div class="evt-time">${timeStr}</div>
+        <div class="evt-label">&#10004; ${svc} Back Online</div>
+        <div class="evt-body">Service has recovered and is responding normally</div>
+      </div>`;
+
+    case 'diagnosis_start':
+      return '';
+
+    case 'llm_request':
+      return `<div class="evt evt-llm-req waiting">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#129504; Consulting AI</div>
+        <div class="evt-body">Sending health data to <strong>${d.model || 'Llama 3.3 70B'}</strong> for diagnosis...</div>
+      </div>`;
+
+    case 'llm_response':
+      const conf = d.confidence || 0;
+      const confPct = Math.round(conf * 100);
+      const action = d.recommended_action || 'wait';
+      return `<div class="evt evt-llm-resp">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#10024; AI Diagnosis</div>
+        <div class="evt-body">
+          <strong style="font-size:14px">${d.diagnosis || 'N/A'}</strong>
+          ${d.reasoning ? '<div class="reasoning">' + d.reasoning + '</div>' : ''}
+          <div class="confidence-row">
+            <span class="confidence-label">Confidence: <strong>${confPct}%</strong></span>
+            <div class="confidence-bar">
+              <div class="confidence-fill" style="width:${confPct}%;background:${confColor(conf)}"></div>
+            </div>
+            <span class="action-badge action-${action}">${action}</span>
+          </div>
+          <div class="llm-meta">${d.model || ''} &middot; ${d.tokens_used ? d.tokens_used + ' tokens' : ''} ${d.response_time_ms ? '&middot; ' + d.response_time_ms.toFixed(0) + 'ms' : ''}</div>
+        </div>
+      </div>`;
+
+    case 'diagnosis':
+      return '';
+
+    case 'llm_decision':
+      return `<div class="evt evt-llm-req">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#9889; Decision</div>
+        <div class="evt-body">Action: <span class="action-badge action-${d.action || 'wait'}">${d.action || 'wait'}</span> &nbsp; Confidence: ${Math.round((d.confidence||0)*100)}%</div>
+      </div>`;
+
+    case 'akash_api_call':
+      // Hide low-level HTTP calls — milestones shown via dedicated events
+      return '';
+
+    case 'akash_api_response':
+      // Hide low-level HTTP responses — results shown via milestone events
+      return '';
+
+    case 'akash_close_old':
+      const closeOk = (d.status||'').includes('closed') && !(d.status||'').includes('failed');
+      return `<div class="evt ${closeOk ? 'evt-health-ok' : 'evt-health-fail'}">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">${closeOk ? '&#10004;' : '&#10060;'} Old Deployment ${closeOk ? 'Closed' : 'Close Failed'}</div>
+        <div class="evt-body">DSEQ ${d.old_dseq}</div>
+      </div>`;
+
+    case 'akash_create_deploy':
+      return `<div class="evt evt-api">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#127968; New Deployment</div>
+        <div class="evt-body">DSEQ: <strong>${d.new_dseq}</strong>${d.transaction_hash ? ' &middot; TX: ' + trunc(d.transaction_hash, 20) : ''}</div>
+      </div>`;
+
+    case 'akash_bids_received':
+      let bidsHtml = `<table class="bids-table"><tr><th>Provider</th><th>Price</th></tr>`;
+      (d.bids_summary || []).forEach((b, i) => {
+        bidsHtml += `<tr><td>${trunc(b.provider, 25)}</td><td>${b.price}</td></tr>`;
+      });
+      bidsHtml += '</table>';
+      return `<div class="evt evt-bids">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#128176; ${d.num_bids} Bids Received</div>
+        <div class="evt-body">${bidsHtml}</div>
+      </div>`;
+
+    case 'akash_bid_selected':
+      return `<div class="evt evt-api">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#9989; Bid Selected</div>
+        <div class="evt-body">Provider: <code class="mono">${trunc(d.provider, 30)}</code><br>Price: ${d.price} ${d.denom || ''}</div>
+      </div>`;
+
+    case 'akash_lease_created':
+      return `<div class="evt evt-api">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#128196; Lease Created</div>
+        <div class="evt-body">DSEQ: ${d.dseq} &middot; Provider: <code class="mono">${trunc(d.provider, 20)}</code></div>
+      </div>`;
+
+    case 'akash_uri_ready':
+      const uriLinks = (d.uris || []).map(u => `<a href="http://${u}" target="_blank">${u}</a>`).join(', ');
+      return `<div class="evt evt-uri">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#127760; URI Ready</div>
+        <div class="evt-body">${uriLinks}</div>
+      </div>`;
+
+    case 'telegram_sent':
+      return `<div class="evt evt-telegram">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#128241; Telegram</div>
+        <div class="evt-body">Sent "${d.message_type}" notification</div>
+      </div>`;
+
+    case 'recovery_start':
+      return `<div class="evt evt-recovery-start">
+        <div class="evt-time">${timeStr}</div>
+        <div class="evt-label"><span class="spinner"></span> Recovery Initiated &mdash; ${svc}</div>
+        <div class="evt-body">${d.reason || 'Service failure detected'}${d.old_dseq ? '<br>Old DSEQ: ' + d.old_dseq : ''}</div>
+      </div>`;
+
+    case 'recovery_progress':
+      return `<div class="evt evt-recovery-progress">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#9881; Recovery</div>
+        <div class="evt-body">${d.detail || d.step}</div>
+      </div>`;
+
+    case 'recovery_complete':
+      return `<div class="evt evt-recovery-complete">
+        <div class="evt-time">${timeStr}</div>
+        <div class="evt-label">&#10004; Recovery Complete &mdash; ${svc}</div>
+        <div class="evt-body">
+          <strong>New DSEQ:</strong> ${d.new_dseq}<br>
+          <strong>URI:</strong> <a href="http://${d.new_uri}" target="_blank" style="color:var(--teal)">${d.new_uri}</a><br>
+          <strong>Provider:</strong> <code class="mono">${trunc(d.provider, 30)}</code><br>
+          <strong>Recovery time:</strong> ${d.total_time_seconds || '?'}s
+        </div>
+      </div>`;
+
+    case 'recovery_done':
+      return `<div class="evt evt-recovery-complete">
+        <div class="evt-time">${timeStr}</div>
+        <div class="evt-label">&#10004; Recovery Complete &mdash; ${svc}</div>
+        <div class="evt-body">DSEQ: ${d.new_dseq} &middot; URI: ${d.new_uri} &middot; Provider: ${trunc(d.provider, 20)}</div>
+      </div>`;
+
+    case 'recovery_failed':
+    case 'recovery_fail':
+      return `<div class="evt evt-recovery-failed">
+        <div class="evt-time">${timeStr}</div>
+        <div class="evt-label">&#10060; Recovery Failed &mdash; ${svc}</div>
+        <div class="evt-body">${d.error || 'Unknown error'}</div>
+      </div>`;
+
+    case 'heartbeat':
+      return '';
+
+    default:
+      return `<div class="evt" style="border-left-color:var(--text-secondary)">
+        <div class="evt-time">${timeStr}</div>
+        <div class="evt-label">${t}</div>
+        <div class="evt-body" style="color:var(--text-muted)">${JSON.stringify(d).slice(0,200)}</div>
+      </div>`;
+  }
+}
+
+function clearEmptyState() {
+  const empty = document.getElementById('logEmpty');
+  if (empty) empty.remove();
+}
+
+function updateLiveIndicator(status) {
+  const $ind = document.getElementById('liveIndicator');
+  const $txt = document.getElementById('liveText');
+  if (!$ind) return;
+  $ind.classList.remove('down', 'recovering');
+  if (status === 'down') {
+    $ind.classList.add('down');
+    $txt.textContent = 'Service Down';
+  } else if (status === 'recovering') {
+    $ind.classList.add('recovering');
+    $txt.textContent = 'Recovering';
+  } else {
+    $txt.textContent = 'All OK';
+  }
+  globalStatus = status;
+}
+
+function updateLiveFromServices(svcs) {
+  if (!svcs || !svcs.length) return;
+  const hasDown = svcs.some(s => ['down','degraded'].includes((s.status||'').toLowerCase()));
+  const hasRecovering = svcs.some(s => (s.status||'').toLowerCase() === 'recovering');
+  if (hasDown) updateLiveIndicator('down');
+  else if (hasRecovering) updateLiveIndicator('recovering');
+  else updateLiveIndicator('ok');
+}
+
+function addEvent(evt) {
+  const t = evt.type;
+
+  // Update live indicator instantly on key events
+  if (t === 'service_down' || t === 'health_streak') {
+    updateLiveIndicator('down');
+  } else if (t === 'recovery_start' || t === 'recovery_progress') {
+    updateLiveIndicator('recovering');
+  } else if (t === 'recovery_complete' || t === 'recovery_done' || t === 'service_healthy') {
+    updateLiveIndicator('ok');
+  } else if (t === 'health_check' && evt.data && evt.data.status !== 'healthy') {
+    updateLiveIndicator('down');
+  }
+
+  // Clear empty state for ANY non-silent event type
+  if (!['heartbeat'].includes(t)) {
+    // Even if renderEvent returns '' (e.g. healthy check), clear empty state for action events
+    if (['service_down','recovery_start','akash_close_old','akash_create_deploy','llm_request','llm_response'].includes(t)) {
+      clearEmptyState();
+    }
+  }
+
+  const html = renderEvent(evt);
+  if (!html) return;
+
+  clearEmptyState();
+  eventCounter++;
+  $log.insertAdjacentHTML('beforeend', html);
+  while ($log.children.length > 200) $log.removeChild($log.firstChild);
+  if (autoScroll) {
+    scrollToBottom();
+  } else {
+    missedEvents++;
+    $newEventsBtn.classList.add('visible');
+  }
+}
+
+// ───── Services panel ─────
+function renderServices(svcs) {
+  if (!svcs || !svcs.length) {
+    $services.innerHTML = '<div class="empty-state">No services monitored</div>';
+    return;
+  }
+  $services.innerHTML = svcs.map(s => {
+    const st = (s.status || 'unknown').toLowerCase();
+    const failures = s.consecutive_failures || 0;
+    const cardClass = st === 'recovering' ? 'svc-card recovering' : 'svc-card';
+    return `<div class="${cardClass}">
+      <div class="svc-header">
+        <span class="svc-name">${s.name}</span>
+        <span class="badge badge-${st}">${st}</span>
+      </div>
+      <div class="svc-grid">
+        <div class="svc-stat">
+          <span class="svc-stat-label">DSEQ</span>
+          <span class="svc-stat-value">${s.dseq || '-'}</span>
+        </div>
+        <div class="svc-stat">
+          <span class="svc-stat-label">Provider</span>
+          <span class="svc-stat-value">${trunc(s.provider, 16)}</span>
+        </div>
+        <div class="svc-stat">
+          <span class="svc-stat-label">Health URL</span>
+          <span class="svc-stat-value">${trunc(s.health_url, 24)}</span>
+        </div>
+        <div class="svc-stat">
+          <span class="svc-stat-label">Last Check</span>
+          <span class="svc-stat-value">${s.last_check ? isoAgo(s.last_check) : 'never'}</span>
+        </div>
+        <div class="svc-stat">
+          <span class="svc-stat-label">Response</span>
+          <span class="svc-stat-value">${s.last_response_time_ms ? s.last_response_time_ms.toFixed(0) + 'ms' : '-'}</span>
+        </div>
+        <div class="svc-stat">
+          <span class="svc-stat-label">Failures</span>
+          <span class="svc-stat-value" style="color:${failures > 0 ? 'var(--red)' : 'var(--green)'}">${failures}</span>
+        </div>
+      </div>
+      <div class="svc-chart-wrap">
+        <canvas id="chart-${s.name}" width="260" height="50"></canvas>
+      </div>
+      <div class="svc-actions">
+        <button class="btn btn-kill" onclick="killService('${s.name}')">Kill Service</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  svcs.forEach(s => {
+    const canvas = document.getElementById('chart-' + s.name);
+    if (!canvas) return;
+    fetchMiniChart(s.name, s.id || 0, canvas);
+  });
+}
+
+async function fetchMiniChart(name, id, canvas) {
+  try {
+    const r = await fetch('/api/health-checks?limit=20');
+    const d = await r.json();
+    const checks = (d.health_checks || {})[name] || [];
+    const data = checks.slice().reverse().map(c => c.response_time_ms || 0);
+    if (charts[name]) { charts[name].destroy(); }
+    charts[name] = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: data.map((_,i) => i),
+        datasets: [{
+          data,
+          borderColor: 'rgba(59,130,246,0.8)',
+          backgroundColor: 'rgba(59,130,246,0.08)',
+          fill: true, tension: 0.4, pointRadius: 0, borderWidth: 1.5,
+        }]
+      },
+      options: {
+        responsive: false, maintainAspectRatio: false,
+        scales: { x: { display: false }, y: { display: false, beginAtZero: true } },
+        plugins: { legend: { display: false } },
+        animation: false,
+      }
+    });
+  } catch(e) {}
+}
+
+// ───── Stats + Services refresh ─────
+async function fetchStats() {
+  try {
+    const [sr, str] = await Promise.all([
+      fetch('/api/status').then(r => r.json()),
+      fetch('/api/stats').then(r => r.json()),
+    ]);
+
+    // Quick stats in left column
+    $quickStats.innerHTML = `
+      <div class="quick-stats">
+        <div class="quick-stat">
+          <div class="quick-stat-value purple">${str.total_recoveries_attempted || 0}</div>
+          <div class="quick-stat-label">Recoveries</div>
+        </div>
+        <div class="quick-stat">
+          <div class="quick-stat-value blue">${str.avg_recovery_time_seconds ? str.avg_recovery_time_seconds + 's' : '-'}</div>
+          <div class="quick-stat-label">Avg Time</div>
+        </div>
+        <div class="quick-stat">
+          <div class="quick-stat-value">${str.total_health_checks || 0}</div>
+          <div class="quick-stat-label">Checks</div>
+        </div>
+      </div>
+    `;
+
+    renderServices(sr.services);
+    updateLiveFromServices(sr.services);
+
+    // Right column: Agent Info
+    const $agentStatus = document.getElementById('agentStatus');
+    const $agentUptime = document.getElementById('agentUptime');
+    const $agentInterval = document.getElementById('agentInterval');
+    const $agentModel = document.getElementById('agentModel');
+    const $agentSvcCount = document.getElementById('agentSvcCount');
+    if ($agentStatus) {
+      const running = sr.agent_status === 'running';
+      $agentStatus.textContent = sr.agent_status || '-';
+      $agentStatus.style.color = running ? 'var(--green)' : 'var(--orange)';
+      $agentUptime.textContent = formatUptime(sr.agent_uptime || 0);
+      $agentInterval.textContent = (str.monitoring_interval_seconds || 30) + 's';
+      $agentModel.textContent = (str.llm_model || '-').split('/').pop();
+      $agentSvcCount.textContent = str.services_count || 0;
+    }
+
+    // Right column: Stats
+    const $statChecks = document.getElementById('statChecks');
+    if ($statChecks) {
+      $statChecks.textContent = str.total_health_checks || 0;
+      document.getElementById('statFailures').textContent = str.total_failures_detected || 0;
+      document.getElementById('statRecoveries').textContent = str.total_recoveries_attempted || 0;
+      document.getElementById('statRecovSucc').textContent = str.total_recoveries_succeeded || 0;
+      document.getElementById('statAvgRecov').textContent = str.avg_recovery_time_seconds ? str.avg_recovery_time_seconds + 's' : '-';
+    }
+
+    // Right column: Recent Decisions
+    try {
+      const dr = await fetch('/api/decisions?limit=5').then(r => r.json());
+      const $dec = document.getElementById('recentDecisions');
+      if ($dec && dr.decisions && dr.decisions.length) {
+        $dec.innerHTML = dr.decisions.map(d => {
+          const action = d.action_taken || 'unknown';
+          const actionClass = action === 'redeploy' ? 'action-redeploy' : (action === 'wait' ? 'action-wait' : 'action-monitor');
+          return `<div class="decision-item">
+            <span class="decision-svc">${d.service_name || 'unknown'}</span>
+            <div class="decision-meta">${isoAgo(d.decided_at)} &middot; ${Math.round((d.confidence || 0) * 100)}% conf</div>
+            <span class="action-badge decision-action ${actionClass}">${action}</span>
+            ${d.outcome ? ' <span style="font-size:10px;color:' + (d.outcome === 'success' ? 'var(--green)' : 'var(--red)') + '">' + d.outcome + '</span>' : ''}
+          </div>`;
+        }).join('');
+      } else if ($dec) {
+        $dec.innerHTML = '<div class="empty-state" style="padding:16px 0;font-size:11px;">No decisions yet</div>';
+      }
+    } catch(e) {}
+
+  } catch(e) { console.error('fetchStats', e); }
+}
+
+// ───── Kill / Simulate ─────
+async function killService(name) {
+  if (!confirm('KILL SERVICE: This will close the Akash deployment for "' + name + '". The agent will detect the failure and attempt recovery. Continue?')) return;
+  try {
+    const r = await fetch('/api/services/' + encodeURIComponent(name) + '/kill', { method: 'POST' });
+    const d = await r.json();
+    console.log('Kill result:', d);
+  } catch(e) { console.error('kill failed', e); }
+}
+
+async function simulateFailure(name) {
+  try {
+    const r = await fetch('/api/services/' + encodeURIComponent(name) + '/simulate-failure', { method: 'POST' });
+    const d = await r.json();
+    console.log('Simulate result:', d);
+  } catch(e) { console.error('simulate failed', e); }
+}
+
+// ───── SSE Connection ─────
+function connectSSE() {
+  const es = new EventSource('/api/events/stream');
+
+  es.onopen = () => {
+    sseConnected = true;
+    $sseDot.className = 'sse-dot connected';
+    $sseLabel.textContent = 'Connected';
+  };
+
+  es.onerror = () => {
+    sseConnected = false;
+    $sseDot.className = 'sse-dot disconnected';
+    $sseLabel.textContent = 'Reconnecting...';
+  };
+
+  const types = [
+    'health_check','health_streak','service_down','service_healthy',
+    'diagnosis_start','llm_request','llm_response','diagnosis','llm_decision',
+    'akash_api_call','akash_api_response','akash_close_old','akash_create_deploy',
+    'akash_bids_received','akash_bid_selected','akash_lease_created','akash_uri_ready',
+    'telegram_sent','recovery_start','recovery_progress','recovery_complete',
+    'recovery_done','recovery_failed','recovery_fail','heartbeat'
+  ];
+
+  types.forEach(t => {
+    es.addEventListener(t, (e) => {
+      try {
+        const evt = JSON.parse(e.data);
+        addEvent(evt);
+        // Refresh service cards on important events
+        if (t === 'health_check' && evt.data && evt.data.status === 'healthy') {
+          fetchStats();
+        }
+        if (['recovery_complete','recovery_done','recovery_failed','recovery_fail','service_healthy','service_down','health_check'].includes(t)) {
+          fetchStats();
+        }
+      } catch(err) { console.error('parse error', t, err); }
+    });
+  });
+
+  return es;
+}
+
+// ───── Initial load ─────
+async function init() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    renderServices(d.services || []);
+    updateLiveFromServices(d.services || []);
+    const events = d.recent_events || [];
+    events.forEach(evt => addEvent(evt));
+    // If any real events loaded, make sure empty state is gone
+    if (events.some(e => renderEvent(e) !== '')) {
+      clearEmptyState();
+    }
+  } catch(e) { console.error('init', e); }
+
+  fetchStats();
+  connectSSE();
+
+  setInterval(() => { fetchStats(); }, 10000);
+}
+
+init();
+</script>
+</body>
+</html>

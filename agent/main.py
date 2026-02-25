@@ -1,0 +1,319 @@
+import asyncio
+import logging
+import time
+from pathlib import Path
+from typing import Any
+
+from agent.config import settings
+from agent.database import (
+    add_service,
+    get_all_services,
+    get_recent_health_checks,
+    get_service,
+    init_db,
+    update_service_deployment,
+)
+import agent.event_bus as bus
+from agent.health_checker import HealthChecker
+from agent.llm_engine import DiagnosisEngine
+from agent.notifier import TelegramNotifier
+from agent.recovery_engine import RecoveryEngine
+
+logger = logging.getLogger("akashguard.agent")
+
+REDEPLOY_CONFIDENCE_THRESHOLD = 0.7
+
+# Module-level dict: service_name -> remaining fake failures
+simulate_failures: dict[str, int] = {}
+
+# Post-recovery cooldown: service_name -> timestamp when cooldown expires
+recovery_cooldowns: dict[str, float] = {}
+RECOVERY_COOLDOWN_SECONDS = 120
+
+
+class AkashGuardAgent:
+
+    def __init__(self) -> None:
+        self.health_checker = HealthChecker()
+        self.diagnosis_engine = DiagnosisEngine()
+        self.recovery_engine = RecoveryEngine()
+        self.notifier = TelegramNotifier()
+        self.running = False
+
+    async def start(self) -> None:
+        init_db()
+        self.running = True
+        logger.info("AkashGuard agent started — interval=%ds", settings.health_check_interval)
+        try:
+            await self.run_loop()
+        finally:
+            await self._cleanup()
+
+    async def run_loop(self) -> None:
+        while self.running:
+            try:
+                await self.monitor_cycle()
+            except Exception as exc:
+                logger.error("monitor cycle failed: %s", exc)
+            await asyncio.sleep(settings.health_check_interval)
+
+    async def monitor_cycle(self) -> None:
+        results = await self.health_checker.check_all_services()
+
+        # Check for simulated failures — override real results
+        for r in results:
+            name = r["service_name"]
+            if name in simulate_failures and simulate_failures[name] > 0:
+                r["is_healthy"] = False
+                r["status_code"] = 503
+                r["error_message"] = "Simulated failure (demo mode)"
+                r["response_time_ms"] = None
+                simulate_failures[name] -= 1
+                if simulate_failures[name] <= 0:
+                    del simulate_failures[name]
+                # Re-record the fake result
+                from agent.database import record_health_check
+                try:
+                    record_health_check(
+                        service_id=r["service_id"],
+                        status_code=503,
+                        response_time_ms=None,
+                        is_healthy=False,
+                        error_message="Simulated failure (demo mode)",
+                    )
+                except Exception:
+                    pass
+
+        # Emit health_check events — suppress during cooldown
+        for r in results:
+            name = r["service_name"]
+            if name in recovery_cooldowns:
+                remaining = recovery_cooldowns[name] - time.time()
+                if remaining > 0:
+                    # Cooldown event emitted once in _evaluate_and_act — skip here
+                    continue
+                del recovery_cooldowns[name]
+            bus.emit("health_check", {
+                "service": name,
+                "status": "healthy" if r["is_healthy"] else "unhealthy",
+                "status_code": r.get("status_code"),
+                "response_time_ms": r.get("response_time_ms"),
+                "error": r.get("error_message"),
+            })
+
+        services = get_all_services()
+        for svc in services:
+            try:
+                await self._evaluate_and_act(svc)
+            except Exception as exc:
+                logger.error("evaluate_and_act failed for %s: %s", svc["name"], exc)
+
+    async def _evaluate_and_act(self, svc: dict[str, Any]) -> None:
+        sid = svc["id"]
+        name = svc["name"]
+        prev_status = svc.get("status", "unknown")
+
+        # Skip evaluation if service is in post-recovery cooldown
+        if name in recovery_cooldowns:
+            remaining = recovery_cooldowns[name] - time.time()
+            if remaining > 0:
+                logger.info("service=%s in cooldown (%.0fs remaining)", name, remaining)
+                bus.emit("health_check", {
+                    "service": name,
+                    "status": "cooldown",
+                    "remaining": round(remaining),
+                })
+                return
+            del recovery_cooldowns[name]
+
+        status, recent = self.health_checker.evaluate_service_health(sid)
+
+        if status == "healthy":
+            logger.info("service=%s status=healthy", name)
+            if prev_status in ("down", "degraded", "recovering"):
+                bus.emit("service_healthy", {"service": name})
+                await self.notifier.notify_service_healthy(name)
+            return
+
+        if status == "unknown":
+            logger.info("service=%s status=unknown (no checks yet)", name)
+            return
+
+        # Consecutive failures count
+        failures = sum(1 for c in recent if not c["is_healthy"])
+        bus.emit("service_down", {
+            "service": name,
+            "status": status,
+            "consecutive_failures": failures,
+        })
+
+        # Emit health_streak when nearing or hitting threshold
+        bus.emit("health_streak", {
+            "service": name,
+            "consecutive_failures": failures,
+            "threshold": settings.failure_threshold,
+        })
+
+        logger.warning("service=%s status=%s — requesting LLM diagnosis", name, status)
+
+        bus.emit("diagnosis_start", {"service": name})
+
+        checks = get_recent_health_checks(sid, limit=10)
+        diagnosis = await self.diagnosis_engine.diagnose(
+            service_id=sid,
+            service_name=name,
+            health_status=status,
+            recent_checks=checks,
+        )
+
+        action = diagnosis["recommended_action"]
+        confidence = diagnosis["confidence"]
+        decision_id = diagnosis.get("decision_id")
+
+        bus.emit("diagnosis", {
+            "service": name,
+            "diagnosis": diagnosis["diagnosis"],
+            "confidence": confidence,
+            "recommended_action": action,
+            "reasoning": diagnosis.get("reasoning", ""),
+        })
+
+        # Emit the decision summary
+        bus.emit("llm_decision", {
+            "service": name,
+            "action": action,
+            "confidence": confidence,
+            "reasoning_summary": diagnosis.get("reasoning", "")[:200],
+        })
+
+        logger.info(
+            "service=%s llm_action=%s confidence=%.2f diagnosis=%s",
+            name, action, confidence, diagnosis["diagnosis"],
+        )
+
+        if action != "redeploy":
+            logger.info("service=%s action=%s — no recovery needed", name, action)
+            return
+
+        if confidence < REDEPLOY_CONFIDENCE_THRESHOLD:
+            logger.info(
+                "service=%s confidence=%.2f < threshold=%.2f — skipping redeploy",
+                name, confidence, REDEPLOY_CONFIDENCE_THRESHOLD,
+            )
+            return
+
+        sdl = self._load_sdl(svc)
+        if not sdl:
+            logger.error("service=%s has no SDL — cannot redeploy", name)
+            return
+
+        await self.notifier.notify_service_down(name, diagnosis)
+
+        old_dseq = svc.get("current_dseq")
+        await self.notifier.notify_recovery_started(name, old_dseq)
+
+        bus.emit("recovery_start", {
+            "service": name,
+            "reason": diagnosis["diagnosis"],
+            "old_dseq": old_dseq,
+        })
+
+        logger.info("service=%s initiating recovery (confidence=%.2f)", name, confidence)
+        t0 = time.monotonic()
+        result = await self.recovery_engine.recover_service(
+            service_id=sid,
+            sdl=sdl,
+            old_dseq=old_dseq,
+            decision_id=decision_id,
+            service_name=name,
+        )
+
+        await self.notifier.notify_recovery_complete(name, result)
+
+        if result["success"]:
+            recovery_cooldowns[name] = time.time() + RECOVERY_COOLDOWN_SECONDS
+            logger.info("service=%s cooldown set for %ds", name, RECOVERY_COOLDOWN_SECONDS)
+            total_time = result.get("total_time_seconds", round(time.monotonic() - t0, 1))
+            bus.emit("recovery_complete", {
+                "service": name,
+                "new_dseq": result.get("new_dseq"),
+                "new_uri": (result.get("uris") or [""])[0],
+                "provider": result.get("provider"),
+                "total_time_seconds": total_time,
+            })
+            logger.info(
+                "service=%s recovery succeeded new_dseq=%s provider=%s uris=%s",
+                name, result["new_dseq"], result["provider"], result["uris"],
+            )
+        else:
+            bus.emit("recovery_failed", {
+                "service": name,
+                "error": result.get("error", "Unknown error"),
+                "step": "recovery",
+            })
+            logger.error("service=%s recovery failed: %s", name, result["error"])
+
+    @staticmethod
+    def _load_sdl(svc: dict[str, Any]) -> str | None:
+        sdl = svc.get("sdl_template")
+        if not sdl:
+            return None
+
+        # If it looks like a file path, read the contents
+        if sdl.rstrip().endswith((".yaml", ".yml")):
+            try:
+                return Path(sdl).read_text()
+            except Exception as exc:
+                logger.error("failed to read SDL file %s: %s", sdl, exc)
+                return None
+
+        # Otherwise it's inline SDL content
+        return sdl
+
+    def register_service(
+        self,
+        name: str,
+        health_url: str,
+        sdl_path: str | None = None,
+        current_dseq: str | None = None,
+        current_provider: str | None = None,
+    ) -> int:
+        sdl_content: str | None = None
+        if sdl_path:
+            path = Path(sdl_path)
+            if path.exists():
+                sdl_content = path.read_text()
+                logger.info("loaded SDL from %s (%d bytes)", sdl_path, len(sdl_content))
+            else:
+                logger.warning("SDL file not found: %s", sdl_path)
+
+        sid = add_service(name, health_url, sdl_content)
+        logger.info("registered service=%s id=%d health_url=%s", name, sid, health_url)
+
+        if current_dseq and current_provider:
+            update_service_deployment(sid, current_dseq, current_provider)
+
+        return sid
+
+    async def stop(self) -> None:
+        self.running = False
+        logger.info("AkashGuard agent stopping")
+        await self._cleanup()
+
+    async def _cleanup(self) -> None:
+        await self.health_checker.close()
+        await self.recovery_engine.close()
+        await self.notifier.close()
+
+
+def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    agent = AkashGuardAgent()
+    asyncio.run(agent.start())
+
+
+if __name__ == "__main__":
+    main()
