@@ -82,25 +82,27 @@ class RecoveryEngine:
             return {}
 
     async def close_deployment(self, dseq: str) -> bool:
-        self._emit_api("DELETE", f"/v1/deployments/{dseq}", f"Closing deployment DSEQ {dseq}")
         try:
             resp = await self._client.delete(f"/deployments/{dseq}")
             logger.debug("DELETE /deployments/%s status=%s body=%s", dseq, resp.status_code, resp.text[:300])
             if resp.status_code >= 400:
                 body_text = resp.text[:300]
-                # Treat "Deployment closed" as success — it's already closed
+                # Already closed (user killed it) — silently succeed, no dashboard events
                 if resp.status_code == 400 and "closed" in body_text.lower():
-                    logger.info("close_deployment dseq=%s already closed (killed by user), skipping", dseq)
+                    logger.info("close_deployment dseq=%s already closed, skipping", dseq)
                     return True
                 logger.warning("close_deployment dseq=%s got %s: %s", dseq, resp.status_code, body_text)
+                self._emit_api("DELETE", f"/v1/deployments/{dseq}", f"Closing deployment DSEQ {dseq}")
                 self._emit_api_resp("DELETE", f"/v1/deployments/{dseq}", resp.status_code, f"Failed: {resp.text[:200]}")
                 bus.emit("akash_close_old", {"service": self._service_name, "old_dseq": dseq, "status": f"failed: HTTP {resp.status_code}"})
                 return False
+            self._emit_api("DELETE", f"/v1/deployments/{dseq}", f"Closing deployment DSEQ {dseq}")
             self._emit_api_resp("DELETE", f"/v1/deployments/{dseq}", resp.status_code, f"Deployment {dseq} closed")
             bus.emit("akash_close_old", {"service": self._service_name, "old_dseq": dseq, "status": "closed"})
             logger.info("closed deployment dseq=%s", dseq)
             return True
         except Exception as exc:
+            self._emit_api("DELETE", f"/v1/deployments/{dseq}", f"Closing deployment DSEQ {dseq}")
             self._emit_api_resp("DELETE", f"/v1/deployments/{dseq}", 0, f"Failed: {exc}")
             bus.emit("akash_close_old", {"service": self._service_name, "old_dseq": dseq, "status": f"failed: {exc}"})
             logger.error("close_deployment dseq=%s failed: %s", dseq, exc)

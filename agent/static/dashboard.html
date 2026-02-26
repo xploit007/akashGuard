@@ -1490,11 +1490,7 @@ function renderEvent(evt) {
       </div>`;
 
     case 'service_killed':
-      return `<div class="evt evt-health-fail">
-        <div class="evt-time">${timeStr} &middot; ${svc}</div>
-        <div class="evt-label">&#128683; SERVICE KILLED BY USER</div>
-        <div class="evt-body">DSEQ ${d.dseq || '?'} closed manually</div>
-      </div>`;
+      return '';  // User action, not agent activity
 
     case 'heartbeat':
       return '';
