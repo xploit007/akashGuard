@@ -118,11 +118,11 @@ cp .env.example .env
 
 ```bash
 # Agent + API (monitoring + dashboard)
-export AGENT_AUTO_MONITOR=true
+$env:AGENT_AUTO_MONITOR = "true"
 uvicorn agent.api:app --host 0.0.0.0 --port 8000
 
 # API only (no active monitoring)
-export AGENT_AUTO_MONITOR=false
+$env:AGENT_AUTO_MONITOR = "true"
 uvicorn agent.api:app --host 0.0.0.0 --port 8000
 ```
 
@@ -130,14 +130,38 @@ uvicorn agent.api:app --host 0.0.0.0 --port 8000
 
 ```bash
 # Build and push Docker images
-docker build -t xploitkid/akashguard-agent:latest agent/
-docker push xploitkid/akashguard-agent:latest
+docker build -t DOCKER_HUB_USERNAME/akashguard-agent:latest agent/
+docker push DOCKER_HUB_USERNAME/akashguard-agent:latest
 
-docker build -t xploitkid/akashguard-chatbot:latest chatbot/
-docker push xploitkid/akashguard-chatbot:latest
+docker build -t DOCKER_HUB_USERNAME/akashguard-chatbot:latest chatbot/
+docker push DOCKER_HUB_USERNAME/akashguard-chatbot:latest
 
 # Deploy via Akash Console or CLI using SDL files in deploy/
 ```
+
+### Register a service (after Docker / first run)
+
+The API starts with no services registered. To have the agent monitor your chatbot (or another service), register it once:
+
+1. **Check services** (optional — will show 0 at first):
+
+   ```powershell
+   Invoke-RestMethod http://localhost:8000/api/services
+   ```
+
+2. **Register the chatbot** (initializes DB and adds the service with its SDL):
+
+   ```bash
+   python -c "from pathlib import Path; from agent.database import init_db, add_service; init_db(); sdl=Path('deploy/chatbot-sdl.yaml').read_text(); print(add_service('chatbot','http://localhost:5000/health',sdl))"
+   ```
+
+3. **Verify** — list services again; you should see the registered service:
+
+   ```powershell
+   Invoke-RestMethod http://localhost:8000/api/services
+   ```
+
+After this, the agent will monitor the registered service and the project is ready to use.
 
 ## API Endpoints
 

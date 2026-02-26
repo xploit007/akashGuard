@@ -5,6 +5,9 @@
 # Debug/test scripts with potential secrets
 misc/
 
+# Deploy configs (SDL, etc.)
+deploy/
+
 # Claude Code
 .claude/
 CLAUDE.md
