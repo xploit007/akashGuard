@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     venice_api_base: str = "https://api.venice.ai/api/v1"
     venice_tts_model: str = "tts-kokoro"
     venice_tts_voice: str = "af_sky"
-    venice_vision_model: str = "qwen-2.5-vl"
+    venice_vision_model: str = "qwen3-235b-a22b-instruct-2507"
     venice_chat_model: str = "llama-3.3-70b"
 
     # AkashML LLM

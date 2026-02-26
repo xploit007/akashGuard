@@ -87,7 +87,14 @@ class RecoveryEngine:
             resp = await self._client.delete(f"/deployments/{dseq}")
             logger.debug("DELETE /deployments/%s status=%s body=%s", dseq, resp.status_code, resp.text[:300])
             if resp.status_code >= 400:
-                logger.warning("close_deployment dseq=%s got %s: %s", dseq, resp.status_code, resp.text[:300])
+                body_text = resp.text[:300]
+                # Treat "Deployment closed" as success — it's already closed
+                if resp.status_code == 400 and "closed" in body_text.lower():
+                    logger.info("close_deployment dseq=%s already closed, treating as success", dseq)
+                    self._emit_api_resp("DELETE", f"/v1/deployments/{dseq}", resp.status_code, f"Deployment {dseq} already closed")
+                    bus.emit("akash_close_old", {"service": self._service_name, "old_dseq": dseq, "status": "closed"})
+                    return True
+                logger.warning("close_deployment dseq=%s got %s: %s", dseq, resp.status_code, body_text)
                 self._emit_api_resp("DELETE", f"/v1/deployments/{dseq}", resp.status_code, f"Failed: {resp.text[:200]}")
                 bus.emit("akash_close_old", {"service": self._service_name, "old_dseq": dseq, "status": f"failed: HTTP {resp.status_code}"})
                 return False
@@ -158,39 +165,97 @@ class RecoveryEngine:
 
     async def create_lease(
         self, manifest: str, dseq: str, gseq: int, oseq: int, provider: str,
+        certificate: dict[str, str] | None = None,
     ) -> bool:
-        self._emit_api("POST", "/v1/leases", f"Creating lease with provider {provider[:20]}...")
-        try:
-            body = {
-                "manifest": manifest,
-                "leases": [{"dseq": dseq, "gseq": gseq, "oseq": oseq, "provider": provider}],
-            }
-            resp = await self._client.post("/leases", json=body)
-            logger.debug("POST /leases status=%s", resp.status_code)
-            logger.debug("create_lease raw response: %s", resp.text[:500])
-            resp.raise_for_status()
-            self._emit_api_resp("POST", "/v1/leases", resp.status_code, f"Lease created DSEQ {dseq}")
-            bus.emit("akash_lease_created", {
-                "service": self._service_name,
-                "dseq": dseq,
-                "provider": provider,
-                "gseq": gseq,
-                "oseq": oseq,
-            })
-            logger.info("lease created dseq=%s provider=%s gseq=%d oseq=%d",
-                        dseq, provider, gseq, oseq)
-            return True
-        except Exception as exc:
-            self._emit_api_resp("POST", "/v1/leases", 0, f"Failed: {exc}")
-            logger.error("create_lease failed dseq=%s provider=%s: %s", dseq, provider, exc)
-            return False
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            self._emit_api("POST", "/v1/leases", f"Creating lease with provider {provider[:20]}... (attempt {attempt}/{max_attempts})")
+            try:
+                body: dict[str, Any] = {
+                    "manifest": manifest,
+                    "leases": [{"dseq": dseq, "gseq": gseq, "oseq": oseq, "provider": provider}],
+                }
+                if certificate:
+                    body["certificate"] = certificate
+                logger.info("create_lease attempt %d/%d: dseq=%s provider=%s cert=%s",
+                            attempt, max_attempts, dseq, provider, bool(certificate))
+                resp = await self._client.post("/leases", json=body)
+                logger.info("POST /leases status=%s response=%s", resp.status_code, resp.text[:1000])
+                if resp.status_code >= 400:
+                    logger.error("create_lease attempt %d FAILED: status=%s response=%s",
+                                 attempt, resp.status_code, resp.text)
+                    if attempt < max_attempts:
+                        logger.info("retrying create_lease in 10s...")
+                        await asyncio.sleep(10)
+                        continue
+                    self._emit_api_resp("POST", "/v1/leases", resp.status_code, f"Failed ({resp.status_code}): {resp.text[:300]}")
+                    return False
+                self._emit_api_resp("POST", "/v1/leases", resp.status_code, f"Lease created DSEQ {dseq}")
+                bus.emit("akash_lease_created", {
+                    "service": self._service_name,
+                    "dseq": dseq,
+                    "provider": provider,
+                    "gseq": gseq,
+                    "oseq": oseq,
+                })
+                logger.info("lease created dseq=%s provider=%s gseq=%d oseq=%d",
+                            dseq, provider, gseq, oseq)
+                return True
+            except Exception as exc:
+                logger.error("create_lease attempt %d exception: %s", attempt, exc)
+                if attempt < max_attempts:
+                    await asyncio.sleep(10)
+                    continue
+                self._emit_api_resp("POST", "/v1/leases", 0, f"Failed: {exc}")
+                return False
+        return False
 
-    async def create_certificate(self) -> dict[str, Any] | None:
+    async def get_certificate(self) -> dict[str, str] | None:
+        try:
+            resp = await self._client.get("/certificates")
+            logger.debug("GET /certificates status=%s", resp.status_code)
+            if resp.status_code >= 400:
+                logger.info("no existing certificate, creating one...")
+                return await self.create_certificate()
+            data = resp.json()
+            certs = data if isinstance(data, list) else data.get("data", [])
+            if certs and isinstance(certs, list) and len(certs) > 0:
+                cert = certs[0]
+                cert_pem = cert.get("certPem") or cert.get("cert") or cert.get("certificate", {}).get("cert")
+                key_pem = cert.get("keyPem") or cert.get("key") or cert.get("certificate", {}).get("pubkey")
+                if cert_pem and key_pem:
+                    logger.info("found existing certificate")
+                    return {"certPem": cert_pem, "keyPem": key_pem}
+            logger.info("no usable certificate found, creating one...")
+            return await self.create_certificate()
+        except Exception as exc:
+            logger.error("get_certificate failed: %s", exc)
+            return None
+
+    async def create_certificate(self) -> dict[str, str] | None:
         try:
             resp = await self._client.post("/certificates")
-            logger.debug("POST /certificates status=%s", resp.status_code)
-            resp.raise_for_status()
-            return resp.json()
+            logger.info("POST /certificates status=%s response=%s", resp.status_code, resp.text[:500])
+            if resp.status_code >= 400:
+                logger.error("create_certificate failed: status=%s body=%s", resp.status_code, resp.text)
+                return None
+            data = resp.json()
+            cert_data = data.get("data", data) if isinstance(data, dict) else data
+            cert_pem = cert_data.get("certPem") or cert_data.get("cert")
+            key_pem = (
+                cert_data.get("encryptedKey")
+                or cert_data.get("keyPem")
+                or cert_data.get("key")
+            )
+            pub_pem = cert_data.get("pubkeyPem") or cert_data.get("pubkey")
+            if cert_pem and key_pem:
+                logger.info("certificate created successfully")
+                result = {"certPem": cert_pem, "keyPem": key_pem}
+                if pub_pem:
+                    result["pubkeyPem"] = pub_pem
+                return result
+            logger.warning("create_certificate response missing cert/key. keys found: %s", list(cert_data.keys()))
+            return None
         except Exception as exc:
             logger.error("create_certificate failed: %s", exc)
             return None
@@ -312,10 +377,21 @@ class RecoveryEngine:
             "denom": bid_price_denom,
         })
 
+        # Fetch certificate for lease creation
+        bus.emit("recovery_progress", {"service": name, "step": "get_cert", "detail": "Fetching deployment certificate..."})
+        certificate = await self.get_certificate()
+        if certificate:
+            logger.info("certificate ready for lease creation")
+        else:
+            logger.warning("no certificate available, proceeding without it")
+
         bus.emit("recovery_progress", {"service": name, "step": "accept_bid", "detail": f"Accepting bid from {provider[:20]}..."})
         logger.info("accepting bid from provider=%s gseq=%d oseq=%d", provider, gseq, oseq)
-        lease_ok = await self.create_lease(manifest, new_dseq, gseq, oseq, provider)
+        lease_ok = await self.create_lease(manifest, new_dseq, gseq, oseq, provider, certificate=certificate)
         if not lease_ok:
+            # Clean up orphaned deployment to avoid wasting funds
+            logger.info("cleaning up orphaned deployment dseq=%s after lease failure", new_dseq)
+            await self.close_deployment(new_dseq)
             error = f"create_lease failed for dseq={new_dseq} provider={provider}"
             logger.error(error)
             return _fail(error, old_dseq)

@@ -199,11 +199,10 @@ async def kill_service(service_name: str) -> JSONResponse:
     if not dseq:
         return JSONResponse({"error": f"Service '{service_name}' has no deployment to kill"}, status_code=400)
 
-    bus.emit("akash_api_call", {
-        "method": "DELETE",
-        "endpoint": f"/v1/deployments/{dseq}",
-        "purpose": f"KILL SERVICE: Closing deployment DSEQ {dseq}",
+    bus.emit("service_killed", {
         "service": service_name,
+        "dseq": dseq,
+        "detail": f"User killed deployment DSEQ {dseq}",
     })
 
     from agent.recovery_engine import RecoveryEngine

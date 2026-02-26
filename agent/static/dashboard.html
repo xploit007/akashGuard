@@ -1259,6 +1259,13 @@ function renderEvent(evt) {
         <div class="evt-body">${d.error || 'Unknown error'}</div>
       </div>`;
 
+    case 'service_killed':
+      return `<div class="evt evt-health-fail">
+        <div class="evt-time">${timeStr} &middot; ${svc}</div>
+        <div class="evt-label">&#128683; SERVICE KILLED BY USER</div>
+        <div class="evt-body">DSEQ ${d.dseq || '?'} closed manually</div>
+      </div>`;
+
     case 'heartbeat':
       return '';
 
@@ -1641,7 +1648,7 @@ function connectSSE() {
     'akash_api_call','akash_api_response','akash_close_old','akash_create_deploy',
     'akash_bids_received','akash_bid_selected','akash_lease_created','akash_uri_ready',
     'telegram_sent','recovery_start','recovery_progress','recovery_complete',
-    'recovery_done','recovery_failed','recovery_fail','heartbeat'
+    'recovery_done','recovery_failed','recovery_fail','service_killed','heartbeat'
   ];
 
   types.forEach(t => {

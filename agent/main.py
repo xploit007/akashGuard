@@ -14,6 +14,7 @@ from agent.database import (
     get_service,
     init_db,
     update_service_deployment,
+    update_service_status,
 )
 import agent.event_bus as bus
 from agent.health_checker import HealthChecker
@@ -41,11 +42,15 @@ class AkashGuardAgent:
         self.recovery_engine = RecoveryEngine()
         self.notifier = TelegramNotifier()
         self.running = False
+        self._cycles_completed = 0
 
     async def start(self) -> None:
         init_db()
         self.running = True
-        logger.info("AkashGuard agent started, interval=%ds", settings.health_check_interval)
+        logger.info(
+            "AkashGuard agent started, interval=%ds, grace_period=%d cycles",
+            settings.health_check_interval, settings.failure_threshold,
+        )
         try:
             await self.run_loop()
         finally:
@@ -101,6 +106,17 @@ class AkashGuardAgent:
                 "response_time_ms": r.get("response_time_ms"),
                 "error": r.get("error_message"),
             })
+
+        self._cycles_completed += 1
+
+        # Startup grace period: collect fresh health data before making decisions.
+        # This prevents stale DB failures from triggering false recovery on restart.
+        if self._cycles_completed < settings.failure_threshold:
+            logger.info(
+                "startup grace period: cycle %d/%d, collecting baseline data",
+                self._cycles_completed, settings.failure_threshold,
+            )
+            return
 
         services = get_all_services()
         for svc in services:
@@ -244,6 +260,11 @@ class AkashGuardAgent:
         if result["success"]:
             recovery_cooldowns[name] = time.time() + RECOVERY_COOLDOWN_SECONDS
             logger.info("service=%s cooldown set for %ds", name, RECOVERY_COOLDOWN_SECONDS)
+
+            # Mark service healthy immediately so dashboard updates
+            update_service_status(sid, "healthy")
+            bus.emit("service_healthy", {"service": name})
+
             total_time = result.get("total_time_seconds", round(time.monotonic() - t0, 1))
             new_uri = (result.get("uris") or [""])[0]
             bus.emit("recovery_complete", {
